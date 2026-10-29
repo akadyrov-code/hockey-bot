@@ -1,0 +1,43 @@
+{
+  "site": "https://rhl.fhr.ru",
+  "timezone": "Europe/Moscow",
+  "extra_timezones": [
+    {"name": "Уфе", "tz": "Asia/Yekaterinburg"}
+  ],
+
+  "player": {
+    "id": 45534,
+    "first_name": "Данил",
+    "last_name": "Нигматуллин",
+    "full_genitive": "Данила Нигматуллина",
+    "first_genitive": "Данила",
+    "number": 90
+  },
+  "team": {
+    "id": 57,
+    "name": "Кристалл"
+  },
+
+  "daily_hour": 9,
+  "weekly_weekday": 0,
+  "weekly_hour": 10,
+
+  "watch_before_minutes": 75,
+  "watch_after_kickoff_minutes": 200,
+  "poll_seconds": 60,
+
+  "vk": {
+    "groups": ["mhc_kristall"],
+    "keywords": ["нигматуллин"],
+    "all_posts": false
+  },
+
+  "photos": {
+    "enabled": true,
+    "model": "claude-opus-5-5",
+    "jersey_hint": "",
+    "max_per_run": 150,
+    "batch": 10,
+    "fresh_days": 4
+  }
+}

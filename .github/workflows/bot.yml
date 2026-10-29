@@ -1,0 +1,51 @@
+name: hockey-bot
+
+on:
+  schedule:
+    # каждые 15 минут (время UTC); GitHub может запускать с задержкой — бот это учитывает
+    - cron: "7,22,37,52 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hockey-bot
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Configure git
+        run: |
+          git config user.name "hockey-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run bot
+        run: python -m bot.main
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          VK_TOKEN: ${{ secrets.VK_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          STATE_PUSH: "1"
+
+      - name: Save state
+        if: always()
+        run: |
+          git add state.json
+          git diff --cached --quiet && exit 0
+          git commit -q -m "bot: state"
+          git pull -q --rebase
+          git push -q
