@@ -146,19 +146,21 @@ class RHL:
     def url(self, path: str) -> str:
         return self.base + path
 
-    def get(self, path: str) -> BeautifulSoup:
-        last = None
-        for attempt in range(3):
+    def get(self, path: str, attempts: int = 3) -> BeautifulSoup:
+        last, not_found = None, False
+        for attempt in range(attempts):
             try:
                 r = self.s.get(self.url(path), timeout=25)
-                if r.status_code == 404:
-                    raise LookupError(f"Нет страницы {path}")
+                not_found = r.status_code == 404      # сайт лиги иногда «моргает» 404-й
                 r.raise_for_status()
                 r.encoding = "utf-8"
                 return BeautifulSoup(r.text, "html.parser")
             except requests.RequestException as e:
                 last = e
-                time.sleep(3 * (attempt + 1))
+                if attempt + 1 < attempts:
+                    time.sleep(3 * (attempt + 1))
+        if not_found:
+            raise LookupError(f"Нет страницы {path}")
         raise RuntimeError(f"Не удалось загрузить {path}: {last}")
 
     # --- календарь

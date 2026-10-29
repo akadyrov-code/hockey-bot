@@ -296,31 +296,43 @@ class Bot:
     # ------------------------------------------------------------ тест
 
     def demo(self) -> None:
-        """Повторяет в канале последний сыгранный матч Данила (с пометкой ТЕСТ)."""
+        """Повторяет в канале последний сыгранный матч Данила (с пометкой ТЕСТ).
+        Если сайт лиги недоступен — берёт сохранённый протокол матча 29.10."""
         self.ensure_chat()
         self.refresh_schedule()                    # узнаём сезон и турнир
-        g = self.site.player_games()[0]
-        m = Match(id=g["match_id"], tournament=self.site.tournament, kickoff="",
-                  home=g["home"], away=g["away"])
-        soup = self.site.get(f"/matchcenter/{m.tournament}/{m.id}/protocol/")
+        try:
+            g = self.site.player_games()[0]
+            m = Match(id=g["match_id"], tournament=self.site.tournament or 1432, kickoff="",
+                      home=g["home"], away=g["away"])
+            soup = self.site.get(f"/matchcenter/{m.tournament}/{m.id}/protocol/", attempts=6)
+            d = parse_ru_date(g["date"]) or self.now().date()
+            hm = re.search(r"(\d{1,2}):(\d{2})\s*МСК", soup.get_text(" "))
+            h, mi = (int(hm.group(1)), int(hm.group(2))) if hm else (19, 0)
+            m.kickoff = datetime(d.year, d.month, d.day, h, mi, tzinfo=self.tz).isoformat()
+        except Exception as e:
+            log(f"Сайт лиги недоступен ({e}), беру сохранённый протокол")
+            import gzip
+            html = gzip.open(ROOT / "demo" / "protocol_905213.html.gz", "rt", encoding="utf-8").read()
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "html.parser")
+            m = Match(id=905213, tournament=1432, kickoff="2026-10-29T19:00:00+03:00",
+                      home="ХК Краснодар", away="МХК Кристалл", place="№ 103 Краснодар")
         p = self.site.parse_protocol(soup, m.id)
-        d = parse_ru_date(g["date"]) or self.now().date()
-        hm = re.search(r"(\d{1,2}):(\d{2})\s*МСК", soup.get_text(" "))
-        h, mi = (int(hm.group(1)), int(hm.group(2))) if hm else (19, 0)
-        m.kickoff = datetime(d.year, d.month, d.day, h, mi, tzinfo=self.tz).isoformat()
 
         send = self.tg.send
         self.tg.send = lambda text, preview=False: (send("🧪 <b>ТЕСТ</b> · повтор матча\n\n" + text, preview),
                                                     self.sleep(3))
-        self.send(f"Повторяю матч {m.home} — {m.away} ({day_str(m.kickoff_dt, False)}) "
-                  "так, как бот присылал бы его вживую.")
-        self.send(self.t.reminder(m, 120, self.season_line()))
-        video = self.site.video_link(m)
-        if video:
-            self.send(self.t.live(m, video), preview=True)
-        self.process_protocol(m, p, {"goals": [], "penalties": []})
-        self.send(self.t.result(m, p, video))
-        self.tg.send = send
+        try:
+            self.send(f"Повторяю матч {m.home} — {m.away} ({day_str(m.kickoff_dt, False)}) "
+                      "так, как бот присылал бы его вживую.")
+            self.send(self.t.reminder(m, 120, self.season_line()))
+            video = self.safe(self.site.video_link, m)
+            if video:
+                self.send(self.t.live(m, video), preview=True)
+            self.process_protocol(m, p, {"goals": [], "penalties": []})
+            self.send(self.t.result(m, p, video))
+        finally:
+            self.tg.send = send
 
     # ------------------------------------------------------------ новости лиги
 
