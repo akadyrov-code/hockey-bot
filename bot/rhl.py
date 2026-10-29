@@ -151,6 +151,8 @@ class RHL:
         for attempt in range(3):
             try:
                 r = self.s.get(self.url(path), timeout=25)
+                if r.status_code == 404:
+                    raise LookupError(f"Нет страницы {path}")
                 r.raise_for_status()
                 r.encoding = "utf-8"
                 return BeautifulSoup(r.text, "html.parser")
@@ -194,7 +196,10 @@ class RHL:
     # --- трансляция
 
     def video_link(self, match: Match) -> str | None:
-        soup = self.get(f"/matchcenter/{match.tournament}/{match.id}/video/")
+        try:
+            soup = self.get(f"/matchcenter/{match.tournament}/{match.id}/video/")
+        except LookupError:
+            return None                     # видео у матча нет (или его убрали)
         return self.parse_video(soup)
 
     @staticmethod

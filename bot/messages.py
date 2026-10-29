@@ -123,6 +123,25 @@ class Texts:
             f"{link}"
         )
 
+    def reminder(self, m: Match, minutes_left: int, season_line: str = "") -> str:
+        k = m.kickoff_dt
+        if 110 <= minutes_left <= 130:
+            left = "через 2 часа"
+        else:
+            h, mi = divmod(max(minutes_left, 0), 60)
+            left = "через " + (f"{h} ч " if h else "") + f"{mi} мин"
+        where = "дома" if self.ours(m.home) else "в гостях"
+        text = (f"⏰ <b>Игра начнётся {left}!</b>\n"
+                f"{escape(m.home)} — {escape(m.away)} ({where})\n"
+                f"Начало: {self.hm(k)}")
+        place = re.sub(r"^№\s*\d+\s*", "", m.place or "")
+        if place:
+            text += f"\n📍 {escape(place)}"
+        if season_line:
+            text += f"\n\n🏒 {escape(self.first)} в сезоне: {season_line}"
+        text += "\n\nСсылку на трансляцию пришлю, как только она появится."
+        return text
+
     def goal(self, m: Match, p: Protocol, g: Goal) -> str:
         home, away = p.home or m.home, p.away or m.away
         scoring_team = home if g.side == "home" else away if g.side == "away" else ""

@@ -22,6 +22,7 @@
   "weekly_weekday": 0,
   "weekly_hour": 10,
 
+  "reminder_minutes": 120,
   "watch_before_minutes": 75,
   "watch_after_kickoff_minutes": 200,
   "poll_seconds": 60,

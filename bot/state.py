@@ -24,6 +24,7 @@ class State(dict):
         m.setdefault("goals", [])
         m.setdefault("penalties", [])
         m.setdefault("result_sent", False)
+        m.setdefault("reminder_sent", False)
         return m
 
     def checkpoint(self) -> None:

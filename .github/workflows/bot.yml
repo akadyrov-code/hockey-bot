@@ -4,7 +4,12 @@ on:
   schedule:
     # каждые 15 минут (время UTC); GitHub может запускать с задержкой — бот это учитывает
     - cron: "7,22,37,52 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      demo:
+        description: "Тест: повторить в канале последний сыгранный матч (с пометкой ТЕСТ)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -40,6 +45,7 @@ jobs:
           VK_TOKEN: ${{ secrets.VK_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           STATE_PUSH: "1"
+          DEMO: ${{ inputs.demo }}
 
       - name: Save state
         if: always()

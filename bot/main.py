@@ -20,7 +20,7 @@ from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .messages import MONTHS, Texts
+from .messages import MONTHS, Texts, day_str
 from .photos import PhotoFinder
 from .rhl import RHL, Match
 from .state import State
@@ -69,6 +69,7 @@ class Bot:
         if not self.st.get("initialized"):
             self.bootstrap()
 
+        self.safe(self.reminders)
         m = self.active_match()
         if m:
             self.watch(m)
@@ -109,7 +110,14 @@ class Bot:
 
     def refresh_schedule(self) -> None:
         sched = self.st.setdefault("schedule", {})
-        fresh = self.site.calendar()
+        try:
+            fresh = self.site.calendar()
+        except Exception as e:
+            # сайт лиги лежит — работаем по сохранённому календарю
+            log(f"Календарь недоступен ({e}), использую сохранённый: {len(sched)} матчей")
+            if sched and not self.site.tournament:
+                self.site.tournament = next(iter(sched.values()))["tournament"]
+            return
         now = self.now()
         fresh_ids = {str(m.id) for m in fresh}
         for m in fresh:
@@ -157,6 +165,8 @@ class Bot:
 
         while self.now() < deadline:
             try:
+                if not ms["reminder_sent"]:
+                    self.reminders()
                 if not ms["live_sent"]:
                     link = self.site.video_link(m) or self.vk_live()
                     if link:
@@ -174,6 +184,28 @@ class Bot:
                 log(f"Ошибка во время матча:\n{traceback.format_exc()}")
             self.sleep(poll)
         log("Время наблюдения вышло")
+
+    def season_line(self) -> str:
+        rows = self.safe(self.site.player_season) or []
+        if not rows:
+            return ""
+        st = rows[0][1]
+        return (f"{st.get('matches', '0')} игр, {st.get('goals', '0')}+{st.get('a', '0')} "
+                f"({st.get('points', '0')} очков)")
+
+    def reminders(self) -> None:
+        """Напоминание за N минут (по умолчанию 2 часа) до начала."""
+        now = self.now()
+        before = timedelta(minutes=self.cfg.get("reminder_minutes", 120))
+        for m in self.matches():
+            ms = self.st.match(m.id)
+            if ms["reminder_sent"] or ms["result_sent"]:
+                continue
+            if m.kickoff_dt - before <= now < m.kickoff_dt - timedelta(minutes=5):
+                left = int((m.kickoff_dt - now).total_seconds() // 60)
+                self.send(self.t.reminder(m, left, self.season_line()))
+                ms["reminder_sent"] = True
+                self.st.checkpoint()
 
     def process_protocol(self, m: Match, p, ms: dict) -> bool:
         """Шлёт новые голы (все) и удаления Данила. Возвращает True, если что-то отправлено."""
@@ -260,6 +292,35 @@ class Bot:
             if any(r.team_id == self.cfg["team"]["id"] or self.t.ours(r.team) for r in c.rows):
                 return c
         return None
+
+    # ------------------------------------------------------------ тест
+
+    def demo(self) -> None:
+        """Повторяет в канале последний сыгранный матч Данила (с пометкой ТЕСТ)."""
+        self.ensure_chat()
+        self.refresh_schedule()                    # узнаём сезон и турнир
+        g = self.site.player_games()[0]
+        m = Match(id=g["match_id"], tournament=self.site.tournament, kickoff="",
+                  home=g["home"], away=g["away"])
+        soup = self.site.get(f"/matchcenter/{m.tournament}/{m.id}/protocol/")
+        p = self.site.parse_protocol(soup, m.id)
+        d = parse_ru_date(g["date"]) or self.now().date()
+        hm = re.search(r"(\d{1,2}):(\d{2})\s*МСК", soup.get_text(" "))
+        h, mi = (int(hm.group(1)), int(hm.group(2))) if hm else (19, 0)
+        m.kickoff = datetime(d.year, d.month, d.day, h, mi, tzinfo=self.tz).isoformat()
+
+        send = self.tg.send
+        self.tg.send = lambda text, preview=False: (send("🧪 <b>ТЕСТ</b> · повтор матча\n\n" + text, preview),
+                                                    self.sleep(3))
+        self.send(f"Повторяю матч {m.home} — {m.away} ({day_str(m.kickoff_dt, False)}) "
+                  "так, как бот присылал бы его вживую.")
+        self.send(self.t.reminder(m, 120, self.season_line()))
+        video = self.site.video_link(m)
+        if video:
+            self.send(self.t.live(m, video), preview=True)
+        self.process_protocol(m, p, {"goals": [], "penalties": []})
+        self.send(self.t.result(m, p, video))
+        self.tg.send = send
 
     # ------------------------------------------------------------ новости лиги
 
@@ -373,6 +434,9 @@ def main() -> None:
     if os.environ.get("FAKE_NOW"):
         fake = datetime.fromisoformat(os.environ["FAKE_NOW"])
         bot.clock = lambda: fake
+    if os.environ.get("DEMO") == "true":
+        bot.demo()
+        return
     bot.run()
 
 
