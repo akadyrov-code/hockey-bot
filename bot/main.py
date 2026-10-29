@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import traceback
@@ -74,6 +75,7 @@ class Bot:
         self.catch_up_results()
         self.safe(self.maybe_daily)
         self.safe(self.maybe_weekly)
+        self.safe(self.league_news)
         self.safe(self.vk_news)
         self.safe(self.vk_photos)
         self.st.save()
@@ -258,6 +260,37 @@ class Bot:
             if any(r.team_id == self.cfg["team"]["id"] or self.t.ours(r.team) for r in c.rows):
                 return c
         return None
+
+    # ------------------------------------------------------------ новости лиги
+
+    def league_news(self) -> None:
+        """Обзоры и новости rhl.fhr.ru, где упомянут Данил (или «Кристалл» в заголовке)."""
+        items = sorted(self.site.news_list(), key=lambda n: n["id"])
+        if not items:
+            return
+        last = self.st.get("league_news_last")
+        now = self.now()
+        surname = self.cfg["player"]["last_name"]
+        for n in items:
+            if last is not None and n["id"] <= last:
+                continue
+            if last is None:      # первый раз: только свежее, за последние полтора дня
+                try:
+                    if datetime.fromisoformat(n["date"]) < now - timedelta(hours=36):
+                        continue
+                except ValueError:
+                    continue
+            text = self.site.news_text(n["url"])
+            quotes = [q.strip() for q in re.split(r"(?<=[.!?…])\s+", text) if surname in q][:2]
+            if not quotes and not self.t.ours(n["title"]):
+                continue
+            msg = f"📰 <b>{escape(n['title'])}</b>\n"
+            if quotes:
+                msg += "\n" + "\n".join(f"«{escape(q)}»" for q in quotes) + "\n"
+            msg += f"\n{n['url']}"
+            self.send(msg, preview=True)
+        self.st["league_news_last"] = max(n["id"] for n in items)
+        self.st.checkpoint()
 
     # ------------------------------------------------------------ ВКонтакте
 

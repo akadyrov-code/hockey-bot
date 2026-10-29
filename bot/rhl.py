@@ -331,6 +331,24 @@ class RHL:
             })
         return games
 
+    # --- новости и обзоры лиги
+
+    def news_list(self) -> list[dict]:
+        soup = self.get("/news/")
+        out = []
+        for a in soup.select("a.material-card__body[href^='/news/']"):
+            m = re.search(r"/news/(\d+)/", a.get("href", ""))
+            name = a.select_one(".material-card__name")
+            tm = a.select_one("time")
+            if m and name:
+                out.append({"id": int(m.group(1)), "url": self.url(m.group(0)), "title": _text(name),
+                            "date": tm.get("datetime", "") if tm else ""})
+        return out
+
+    def news_text(self, url: str) -> str:
+        soup = self.get(urlparse(url).path)
+        return _text(soup.select_one(".news-detail__text"))
+
     # --- турнирная таблица по конференциям
 
     def conferences(self) -> list[Conference]:
