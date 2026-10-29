@@ -294,6 +294,13 @@ class Bot:
             by_album.setdefault(f["album_url"], []).append(f)
         for url, items in by_album.items():
             title = items[0]["album"]
+            if items[0]["bytes"] is None:          # без ИИ: просто ссылка на альбом
+                n = items[0].get("count") or 0
+                self.send(f"📸 <b>Новые фото с матча</b>"
+                          + (f"\n«{escape(title)}»" if title else "")
+                          + (f" · {n} фото" if n else "")
+                          + f"\n{url}", preview=True)
+                continue
             caption = (f"📸 <b>{escape(self.t.first)} на фото</b>"
                        + (f" · {escape(title)}" if title else "")
                        + f"\nВесь альбом: {url}")
@@ -326,8 +333,8 @@ def main() -> None:
     site = RHL(cfg["site"], cfg["team"]["id"], cfg["player"]["id"])
     vk_token = os.environ.get("VK_TOKEN")
     photos = None
-    if vk_token and os.environ.get("ANTHROPIC_API_KEY") and cfg.get("photos", {}).get("enabled", True):
-        photos = PhotoFinder(vk_token, cfg)
+    if vk_token and cfg.get("photos", {}).get("enabled", True):
+        photos = PhotoFinder(vk_token, cfg, use_ai=bool(os.environ.get("ANTHROPIC_API_KEY")))
     bot = Bot(cfg, state, Telegram(token, dry_run=dry), site,
               VK(vk_token) if vk_token else None, photos)
     if os.environ.get("FAKE_NOW"):

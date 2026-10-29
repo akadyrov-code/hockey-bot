@@ -1,7 +1,8 @@
-"""Фото с матчей из альбомов ВК: оставляем только те, где виден игрок с номером 90.
+"""Фото с матчей из альбомов ВК.
 
-Номер на свитере ищет модель Claude (лица в шлемах почти не видно).
-Нужны VK_TOKEN и ANTHROPIC_API_KEY.
+С ANTHROPIC_API_KEY: модель Claude ищет на фото номер 90 (лица в шлемах почти
+не видно), и в канал уходят только фото с Данилом.
+Без него: в канал уходит ссылка на новый альбом, по одному разу на альбом.
 """
 from __future__ import annotations
 
@@ -49,11 +50,12 @@ def best_size(photo: dict, max_side: int = 1280) -> str:
 
 
 class PhotoFinder:
-    def __init__(self, vk_token: str, cfg: dict):
+    def __init__(self, vk_token: str, cfg: dict, use_ai: bool = True):
         self.token = vk_token
         self.cfg = cfg
         self.pcfg = cfg.get("photos", {})
-        self.client = anthropic.Anthropic()     # ключ из ANTHROPIC_API_KEY
+        self.use_ai = use_ai
+        self.client = anthropic.Anthropic() if use_ai else None   # ключ из ANTHROPIC_API_KEY
 
     # --- ВК
 
@@ -120,8 +122,10 @@ class PhotoFinder:
     # --- основной шаг
 
     def new_photos(self, state: dict, silent: bool = False) -> list[dict]:
-        """Ищет новые фото и возвращает подходящие: [{'bytes', 'album', 'album_url'}]."""
+        """Ищет новые фото и возвращает подходящие: [{'bytes', 'album', 'album_url'}].
+        Без ИИ возвращает новые альбомы: [{'bytes': None, 'album', 'album_url', 'count'}]."""
         seen = state.setdefault("photos_seen", {})       # album_id -> макс. id фото
+        notified = state.setdefault("albums_notified", [])
         max_check = self.pcfg.get("max_per_run", 150)
         batch = self.pcfg.get("batch", 10)
         fresh_days = self.pcfg.get("fresh_days", 4)
@@ -144,6 +148,14 @@ class PhotoFinder:
                           if p["id"] > (last or 0) and p.get("date", 0) > time.time() - fresh_days * 86400]
                 if not photos:
                     continue
+                album_url = f"https://vk.com/album-{gid}_{aid}"
+                if not self.use_ai:
+                    seen[key] = max(p["id"] for p in photos)
+                    if key not in notified:
+                        notified.append(key)
+                        found.append({"bytes": None, "album": album.get("title", ""),
+                                      "album_url": album_url, "count": album.get("size", len(photos))})
+                    continue
                 photos = sorted(photos, key=lambda p: p["id"])[: max(0, max_check - checked)]
                 for i in range(0, len(photos), batch):
                     chunk = photos[i:i + batch]
@@ -157,7 +169,7 @@ class PhotoFinder:
                     hits = self.classify([b for _, b in ok]) if ok else []
                     for j in hits:
                         found.append({"bytes": ok[j][1], "album": album.get("title", ""),
-                                      "album_url": f"https://vk.com/album-{gid}_{aid}"})
+                                      "album_url": album_url})
                     checked += len(chunk)
                     seen[key] = max(seen.get(key) or 0, max(p["id"] for p in chunk))
                 if checked >= max_check:
