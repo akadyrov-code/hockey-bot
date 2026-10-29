@@ -1,8 +1,238 @@
 {
  "chat_id": -1004467902137,
- "force_daily": true,
  "force_weekly": true,
  "initialized": true,
+ "last_daily": "2026-10-30",
+ "matches": {
+  "905222": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905226": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905245": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905247": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905298": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905302": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905333": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905339": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905360": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905364": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905382": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905387": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905398": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905404": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905448": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905455": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905468": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905470": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905512": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905514": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905526": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905531": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905546": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905553": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905591": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905596": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905609": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905615": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905629": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905633": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905649": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905654": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905670": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905676": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905695": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905705": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905719": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  },
+  "905730": {
+   "goals": [],
+   "live_sent": "",
+   "penalties": [],
+   "result_sent": false
+  }
+ },
  "schedule": {
   "905222": {
    "away": "МХК Кристалл",
