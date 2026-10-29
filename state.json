@@ -1,8 +1,8 @@
 {
  "chat_id": -1004467902137,
- "force_weekly": true,
  "initialized": true,
  "last_daily": "2026-10-30",
+ "last_weekly": "2026-W44",
  "matches": {
   "905222": {
    "goals": [],
@@ -538,5 +538,10 @@
    "place": "№ 620 Саратов",
    "tournament": 1432
   }
+ },
+ "standings_snap": {
+  "date": "2026-10-30",
+  "points": 9,
+  "pos": 6
  }
 }
