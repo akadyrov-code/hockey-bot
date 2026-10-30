@@ -45,7 +45,8 @@ def parse_ru_date(s: str) -> date | None:
 
 class Bot:
     def __init__(self, cfg: dict, state: State, tg: Telegram, site: RHL, vk: VK | None = None,
-                 photos: PhotoFinder | None = None, clock=None, sleep=time.sleep):
+                 photos: PhotoFinder | None = None, clock=None, sleep=time.sleep,
+                 loop_minutes: int = 0):
         self.cfg = cfg
         self.st = state
         self.tg = tg
@@ -57,6 +58,10 @@ class Bot:
         self.sleep = sleep
         self.t = Texts(cfg)
         self.started = self.clock()
+        # loop_minutes > 0: работаем «сменой» — проверяем всё каждую минуту до конца смены
+        self.loop_minutes = loop_minutes
+        self.deadline = self.started + timedelta(minutes=loop_minutes or 330)
+        self.last_full = None
 
     def now(self) -> datetime:
         return self.clock().astimezone(self.tz)
@@ -68,18 +73,34 @@ class Bot:
         self.refresh_schedule()
         if not self.st.get("initialized"):
             self.bootstrap()
+        self.tick(full=True)
+        if self.loop_minutes:
+            log(f"Смена до {self.deadline:%H:%M}")
+        while self.loop_minutes and self.now() < self.deadline - timedelta(minutes=2):
+            self.sleep(60)
+            full = self.now() - self.last_full >= timedelta(minutes=10)
+            if full:
+                self.refresh_schedule()
+            self.tick(full)
+        self.st.checkpoint()
 
+    def tick(self, full: bool) -> None:
+        """Раз в минуту — напоминания и матчи; раз в 10 минут — всё остальное."""
         self.safe(self.reminders)
         m = self.active_match()
         if m:
             self.watch(m)
-        self.catch_up_results()
+            full = True
+        if not full:
+            return
+        self.safe(self.catch_up_results)
         self.safe(self.maybe_daily)
         self.safe(self.maybe_weekly)
         self.safe(self.league_news)
         self.safe(self.vk_news)
         self.safe(self.vk_photos)
         self.st.save()
+        self.last_full = self.now()
 
     def safe(self, fn, *args):
         try:
@@ -159,7 +180,7 @@ class Bot:
         ms = self.st.match(m.id)
         kick = m.kickoff_dt
         deadline = min(kick + timedelta(minutes=self.cfg["watch_after_kickoff_minutes"]),
-                       self.started + timedelta(hours=5, minutes=30))
+                       self.deadline)
         poll = self.cfg.get("poll_seconds", 60)
         log(f"Слежу за матчем {m.home} — {m.away} ({kick:%d.%m %H:%M}) до {deadline:%H:%M}")
 
@@ -441,8 +462,9 @@ def main() -> None:
     photos = None
     if vk_token and cfg.get("photos", {}).get("enabled", True):
         photos = PhotoFinder(vk_token, cfg, use_ai=bool(os.environ.get("ANTHROPIC_API_KEY")))
+    loop = 0 if os.environ.get("FAKE_NOW") else int(os.environ.get("LOOP_MINUTES") or 0)
     bot = Bot(cfg, state, Telegram(token, dry_run=dry), site,
-              VK(vk_token) if vk_token else None, photos)
+              VK(vk_token) if vk_token else None, photos, loop_minutes=loop)
     if os.environ.get("FAKE_NOW"):
         fake = datetime.fromisoformat(os.environ["FAKE_NOW"])
         bot.clock = lambda: fake

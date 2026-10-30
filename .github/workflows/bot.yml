@@ -1,9 +1,11 @@
 name: hockey-bot
 
+# Бот работает «сменами» по ~5,5 часа: внутри смены проверяет всё каждую минуту,
+# а в конце сам запускает следующую смену. Расписание ниже — запасной вариант,
+# если цепочка смен оборвётся (GitHub запускает его нерегулярно).
 on:
   schedule:
-    # каждые 15 минут (время UTC); GitHub может запускать с задержкой — бот это учитывает
-    - cron: "7,22,37,52 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       demo:
@@ -13,9 +15,11 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
-  group: hockey-bot
+  # тест идёт отдельно и не ждёт окончания смены
+  group: hockey-bot-${{ inputs.demo == true && 'demo' || 'main' }}
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +27,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:
+      - run: echo "START_TS=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
+        with:
+          ref: main            # свежий state.json, даже если запуск ждал в очереди
 
       - uses: actions/setup-python@v6
         with:
@@ -46,6 +54,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           STATE_PUSH: "1"
           DEMO: ${{ inputs.demo }}
+          LOOP_MINUTES: ${{ inputs.demo == true && '0' || '330' }}
 
       - name: Save state
         if: always()
@@ -55,3 +64,22 @@ jobs:
           git commit -q -m "bot: state"
           git pull -q --rebase
           git push -q
+
+      - name: Start next shift
+        # только после нормальной смены: если бот падает сразу, не зацикливаемся,
+        # а ждём запасного запуска по расписанию
+        if: always() && inputs.demo != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          elapsed=$(( $(date +%s) - START_TS ))
+          if [ "$elapsed" -lt 1200 ]; then
+            echo "Смена была короткой (${elapsed} c) — следующую запустит расписание"
+            exit 0
+          fi
+          curl -sSf -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/bot.yml/dispatches" \
+            -d '{"ref":"main"}'
+          echo "Следующая смена запущена"
