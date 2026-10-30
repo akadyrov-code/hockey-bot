@@ -15,7 +15,8 @@
   },
   "team": {
     "id": 57,
-    "name": "Кристалл"
+    "name": "Кристалл",
+    "name_genitive": "Кристалла"
   },
 
   "daily_hour": 9,

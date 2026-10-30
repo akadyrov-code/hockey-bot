@@ -66,6 +66,7 @@ class Texts:
         self.first_gen = pl.get("first_genitive", self.first)
         self.number = pl["number"]
         self.team = cfg["team"]["name"]          # «Кристалл»
+        self.team_gen = cfg["team"].get("name_genitive", self.team)
         self.site = cfg["site"].rstrip("/")
         self.msk = ZoneInfo(cfg.get("timezone", "Europe/Moscow"))
         self.extra_tz = [(z["name"], ZoneInfo(z["tz"])) for z in cfg.get("extra_timezones", [])]
@@ -83,6 +84,11 @@ class Texts:
 
     def who(self, pid: int, name: str) -> str:
         return f"<b>{escape(name)}</b>" if pid == self.pid else escape(name)
+
+    def surname(self, pid: int, name: str) -> str:
+        """'Данил Нигматуллин' -> 'Нигматуллин' (жирным, если это Данил)."""
+        last = escape(name.split()[-1]) if name else ""
+        return f"<b>{last}</b>" if pid == self.pid else last
 
     def scoreline(self, home: str, away: str, score: str) -> str:
         return f"{escape(home)} <b>{escape(score)}</b> {escape(away)}"
@@ -193,12 +199,20 @@ class Texts:
                      else f"❌ «{escape(self.team)}» уступает\n")
         except ValueError:
             pass
+        ours_side = "home" if self.ours(home) else "away" if self.ours(away) else ""
+        our_goals = [g for g in p.goals if g.side == ours_side]
+        if our_goals:
+            text += f"\n🏒 <b>Голы «{escape(self.team_gen)}»:</b>\n"
+            for g in our_goals:
+                line = f"• {escape(g.time)} — {self.surname(g.scorer_id, g.scorer)}"
+                if g.assists:
+                    line += " (" + ", ".join(self.surname(pid, n) for pid, n in g.assists) + ")"
+                if g.situation and g.situation != "рав.":
+                    line += f", {escape(SITUATION.get(g.situation, g.situation))}"
+                text += line + "\n"
         text += "\n"
         if p.player_line:
             text += f"⭐ <b>{escape(self.full)}</b>: {self.line(p.player_line)}\n"
-            for g in p.goals:
-                if g.scorer_id == self.pid:
-                    text += f"   • гол на {escape(g.time)} ({period_name(g.period)})\n"
         else:
             text += f"{escape(self.first)} в протоколе этого матча не значится.\n"
         text += "\n"
