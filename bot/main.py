@@ -94,6 +94,7 @@ class Bot:
         if not full:
             return
         self.safe(self.catch_up_results)
+        self.safe(self.postgame_digests)
         self.safe(self.maybe_daily)
         self.safe(self.maybe_weekly)
         self.safe(self.league_news)
@@ -250,6 +251,7 @@ class Bot:
         video = ms.get("live_sent") or self.safe(self.site.video_link, m)
         self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
         ms["result_sent"] = True
+        ms["postgame_after"] = (self.now() + timedelta(minutes=30)).isoformat()
         self.st.checkpoint()
 
     def catch_up_results(self) -> None:
@@ -276,6 +278,27 @@ class Bot:
         self.safe(self.vk_photos, True)
         self.st.checkpoint()
 
+    def digest(self, title: str | None = None) -> str:
+        now = self.now()
+        games = self.site.player_games()
+        return self.t.daily(now.date(), self.site.player_season(), games[0] if games else None,
+                            self.our_conference(), self.next_match(), now,
+                            self.safe(self.site.team_forwards_season), title)
+
+    def postgame_digests(self) -> None:
+        """Сводка после матча — когда лига обновит сезонную статистику (обычно через 30–60 мин)."""
+        now = self.now()
+        for mid, ms in self.st.get("matches", {}).items():
+            after = ms.get("postgame_after")
+            if not after or ms.get("postgame_sent") or now < datetime.fromisoformat(after):
+                continue
+            played = any(str(g["match_id"]) == mid for g in self.site.player_games())
+            if not played and now < datetime.fromisoformat(after) + timedelta(hours=3):
+                continue                      # статистику ещё не обновили — подождём
+            self.send(self.digest("📋 Сводка после матча"))
+            ms["postgame_sent"] = True
+            self.st.checkpoint()
+
     def maybe_daily(self) -> None:
         now = self.now()
         if not self.st.pop("force_daily", False) and (
@@ -283,11 +306,7 @@ class Bot:
                 or now.hour < self.cfg["daily_hour"]
                 or self.st.get("last_daily") == now.date().isoformat()):
             return
-        games = self.site.player_games()
-        conf = self.our_conference()
-        text = self.t.daily(now.date(), self.site.player_season(), games[0] if games else None,
-                            conf, self.next_match(), now, self.safe(self.site.team_forwards_season))
-        self.send(text)
+        self.send(self.digest())
         self.st["last_daily"] = now.date().isoformat()
         self.st.checkpoint()
 
@@ -354,6 +373,7 @@ class Bot:
                 self.send(self.t.live(m, video), preview=True)
             self.process_protocol(m, p, {"goals": [], "penalties": []})
             self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
+            self.send(self.digest("📋 Сводка после матча"))
         finally:
             self.tg.send = send
 

@@ -282,8 +282,8 @@ class Texts:
 
     def daily(self, today: date, season_rows, last_game: dict | None,
               conf: Conference | None, next_match: Match | None, now: datetime,
-              season_fw: list | None = None) -> str:
-        text = f"☀️ <b>Доброе утро! Сводка на {day_str(today)}</b>\n\n"
+              season_fw: list | None = None, title: str | None = None) -> str:
+        text = f"<b>{title}</b>\n\n" if title else f"☀️ <b>Сводка на {day_str(today)}</b>\n\n"
         text += f"🏒 <b>{escape(self.full)}</b> #{self.number} · «{escape(self.team)}»\n"
         for name, st in season_rows:
             g, a, pts = (int(st.get(k) or 0) for k in ("goals", "a", "points"))
