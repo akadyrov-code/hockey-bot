@@ -19,7 +19,8 @@
     "name_genitive": "Кристалла"
   },
 
-  "daily_hour": 9,
+  "daily_hour": 12,
+  "daily_weekdays": [0, 1, 2, 3, 4],
   "weekly_weekday": 0,
   "weekly_hour": 10,
 

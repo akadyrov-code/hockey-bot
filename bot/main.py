@@ -279,7 +279,9 @@ class Bot:
     def maybe_daily(self) -> None:
         now = self.now()
         if not self.st.pop("force_daily", False) and (
-                now.hour < self.cfg["daily_hour"] or self.st.get("last_daily") == now.date().isoformat()):
+                now.weekday() not in self.cfg.get("daily_weekdays", range(7))   # 0 = понедельник
+                or now.hour < self.cfg["daily_hour"]
+                or self.st.get("last_daily") == now.date().isoformat()):
             return
         games = self.site.player_games()
         conf = self.our_conference()
