@@ -15,6 +15,11 @@ SITUATION = {"рав.": "в равных составах", "бол.": "в бо�
              "мен.": "в меньшинстве", "п.в.": "в пустые ворота"}
 
 
+def _int_safe(s: str) -> int:
+    m = re.search(r"\d+", s or "")
+    return int(m.group()) if m else 0
+
+
 def plural(n: int, one: str, few: str, many: str) -> str:
     n = abs(n)
     if n % 10 == 1 and n % 100 != 11:
@@ -187,7 +192,47 @@ class Texts:
             f"Счёт: {self.scoreline(home, away, p.score or '0:0')}"
         )
 
-    def result(self, m: Match, p: Protocol, video: str | None) -> str:
+    @staticmethod
+    def _n(st: dict, key: str) -> int:
+        return _int_safe(st.get(key, "")) * (-1 if str(st.get(key, "")).startswith("-") else 1)
+
+    def _ranked(self, rows: list) -> list:
+        key = lambda r: (self._n(r[2], "points"), self._n(r[2], "goals"), self._n(r[2], "sog"))
+        return sorted(rows, key=key, reverse=True)
+
+    def rank_of(self, rows: list, field: str) -> int | None:
+        me = next((r for r in rows if r[0] == self.pid), None)
+        if not me:
+            return None
+        return 1 + sum(1 for r in rows if self._n(r[2], field) > self._n(me[2], field))
+
+    def forwards_block(self, title: str, rows: list, season: bool, top: int = 5) -> str:
+        if not rows:
+            return ""
+        ranked = self._ranked(rows)
+        if not season:
+            ranked = [r for r in ranked if self._n(r[2], "points") or r[0] == self.pid] or ranked[:3]
+        shown = ranked[:top]
+        text = f"\n📊 <b>{title}</b>\n"
+        for i, (pid, name, st) in enumerate(ranked, 1):
+            if (pid, name, st) not in shown and pid != self.pid:
+                continue
+            if i > top and pid == self.pid:
+                text += "…\n"
+            g, a, pts = self._n(st, "goals"), self._n(st, "a"), self._n(st, "points")
+            line = f"{i}. {self.surname(pid, name)} — {g}+{a}"
+            if season:
+                line += f" ({pts} {plural(pts, 'очко', 'очка', 'очков')}, {st.get('matches', '0')} и)"
+            line += f", +/- {signed(st.get('pm', '0'))}"
+            if st.get("sog") not in (None, "", "-", "0"):
+                line += f", бр. {st['sog']}"
+            text += line + "\n"
+        rp, rg = self.rank_of(rows, "points"), self.rank_of(rows, "goals")
+        if rp:
+            text += f"{escape(self.first)}: {rp}-й по очкам, {rg}-й по голам среди нападающих\n"
+        return text
+
+    def result(self, m: Match, p: Protocol, video: str | None, season_fw: list | None = None) -> str:
         home, away = p.home or m.home, p.away or m.away
         extra = f" ({escape(p.score_type)})" if p.score_type else ""
         text = f"🏁 <b>Матч завершён</b>\n{self.scoreline(home, away, p.score)}{extra}\n"
@@ -210,11 +255,23 @@ class Texts:
                 if g.situation and g.situation != "рав.":
                     line += f", {escape(SITUATION.get(g.situation, g.situation))}"
                 text += line + "\n"
+        our_pens = [x for x in p.penalties if x.side == ours_side]
+        if our_pens:
+            total = sum(_int_safe(x.minutes) for x in our_pens)
+            text += f"\n⛔ <b>Удаления «{escape(self.team_gen)}»</b> ({total} мин):\n"
+            for x in our_pens:
+                who = self.surname(x.player_id, x.player) if x.player_id else "командный штраф"
+                text += f"• {escape(x.time)} — {who}, {escape(x.minutes)} мин ({escape(x.reason)})\n"
         text += "\n"
         if p.player_line:
             text += f"⭐ <b>{escape(self.full)}</b>: {self.line(p.player_line)}\n"
         else:
             text += f"{escape(self.first)} в протоколе этого матча не значится.\n"
+        text += self.forwards_block(f"Нападающие «{escape(self.team_gen)}» за матч",
+                                    p.forwards.get(ours_side, []), season=False)
+        if season_fw:
+            text += self.forwards_block(f"Нападающие «{escape(self.team_gen)}» за сезон",
+                                        season_fw, season=True)
         text += "\n"
         if video:
             text += f"📺 <a href=\"{escape(video)}\">Запись матча</a>\n"
@@ -224,7 +281,8 @@ class Texts:
     # --- утренняя сводка
 
     def daily(self, today: date, season_rows, last_game: dict | None,
-              conf: Conference | None, next_match: Match | None, now: datetime) -> str:
+              conf: Conference | None, next_match: Match | None, now: datetime,
+              season_fw: list | None = None) -> str:
         text = f"☀️ <b>Доброе утро! Сводка на {day_str(today)}</b>\n\n"
         text += f"🏒 <b>{escape(self.full)}</b> #{self.number} · «{escape(self.team)}»\n"
         for name, st in season_rows:
@@ -243,6 +301,12 @@ class Texts:
                 text += f"• Время на льду: {st['toiAvg']} за игру\n"
             if st.get("foPtc") and st.get("fo") not in ("0", ""):
                 text += f"• Вбрасывания: {st['foPtc'].replace('.', ',')}% выигранных\n"
+
+        if season_fw:
+            rp, rg = self.rank_of(season_fw, "points"), self.rank_of(season_fw, "goals")
+            if rp:
+                text += (f"📈 Среди нападающих «{escape(self.team_gen)}»: {rp}-й по очкам, "
+                         f"{rg}-й по голам\n")
 
         if last_game:
             text += (f"\n🕐 Последняя игра — {escape(last_game['date'].rsplit(' ', 1)[0])}:\n"

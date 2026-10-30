@@ -227,7 +227,7 @@ class Bot:
 
     def send_result(self, m: Match, p, ms: dict) -> None:
         video = ms.get("live_sent") or self.safe(self.site.video_link, m)
-        self.send(self.t.result(m, p, video))
+        self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
         ms["result_sent"] = True
         self.st.checkpoint()
 
@@ -263,7 +263,7 @@ class Bot:
         games = self.site.player_games()
         conf = self.our_conference()
         text = self.t.daily(now.date(), self.site.player_season(), games[0] if games else None,
-                            conf, self.next_match(), now)
+                            conf, self.next_match(), now, self.safe(self.site.team_forwards_season))
         self.send(text)
         self.st["last_daily"] = now.date().isoformat()
         self.st.checkpoint()
@@ -330,7 +330,7 @@ class Bot:
             if video:
                 self.send(self.t.live(m, video), preview=True)
             self.process_protocol(m, p, {"goals": [], "penalties": []})
-            self.send(self.t.result(m, p, video))
+            self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
         finally:
             self.tg.send = send
 

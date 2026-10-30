@@ -110,6 +110,7 @@ class Protocol:
     goals: list[Goal] = field(default_factory=list)
     penalties: list[Penalty] = field(default_factory=list)
     player_line: dict[str, str] | None = None
+    forwards: dict[str, list] = field(default_factory=dict)   # side -> [(id, имя, {...})]
 
 
 @dataclass
@@ -281,6 +282,15 @@ class RHL:
                     side=side,
                 ))
 
+        # Нападающие обеих команд за матч
+        for group in soup.select(".matchcenter-protocol-players-stats__group"):
+            side = "home" if "--home" in " ".join(group.get("class", [])) else "away"
+            for pos in group.select(".matchcenter-protocol-players-stats__position"):
+                title = _text(pos.select_one(".matchcenter-protocol-players-stats__position-title"))
+                if not title.startswith("Нападающ"):
+                    continue
+                p.forwards[side] = self._stat_rows(pos, "matchcenter-protocol-players-stats__table-col-param")
+
         # Строка игрока в статистике матча
         for row in soup.select(".matchcenter-protocol-players-stats tbody tr"):
             a = row.select_one("a.person-name-with-meta__name")
@@ -337,6 +347,26 @@ class RHL:
                 "stats": _params(row, "player-profile-matches__table-col-param"),
             })
         return games
+
+    # --- статистика нападающих команды за сезон
+
+    def team_forwards_season(self) -> list:
+        path = (f"/stat/players/season/{self.season}/tournament/{self.tournament}/"
+                f"position/forwards/?teamId={self.team_id}")
+        soup = self.get(path)
+        table = soup.select_one("table")
+        return self._stat_rows(table, "stats-personal__position-table-col-param") if table else []
+
+    @staticmethod
+    def _stat_rows(node, prefix: str) -> list:
+        rows = []
+        for tr in node.select("tbody tr"):
+            a = next((x for x in tr.select("a[href*='/players/']") if x.get_text(strip=True)), None)
+            if not a:
+                continue
+            pid = PLAYER_HREF.search(a.get("href", ""))
+            rows.append((int(pid.group(1)) if pid else 0, _person_name(a), _params(tr, prefix)))
+        return rows
 
     # --- новости и обзоры лиги
 
