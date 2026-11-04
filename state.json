@@ -5,15 +5,6 @@
  "last_weekly": "2026-W45",
  "league_news_last": 51376,
  "matches": {
-  "905222": {
-   "goals": [],
-   "live_sent": "https://vkvideo.ru/video-60074608_456240754",
-   "penalties": [],
-   "postgame_after": "2026-11-01T15:47:15.954147+03:00",
-   "postgame_sent": true,
-   "reminder_sent": true,
-   "result_sent": true
-  },
   "905226": {
    "goals": [],
    "live_sent": "https://vkvideo.ru/video-60074608_456240755",
@@ -277,14 +268,6 @@
   }
  },
  "schedule": {
-  "905222": {
-   "away": "МХК Кристалл",
-   "home": "МХК Ростов",
-   "id": 905222,
-   "kickoff": "2026-11-01T13:00:00+03:00",
-   "place": "№ 112 Ростов-на-Дону",
-   "tournament": 1432
-  },
   "905226": {
    "away": "МХК Кристалл",
    "home": "МХК Ростов",
