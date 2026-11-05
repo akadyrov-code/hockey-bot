@@ -165,7 +165,8 @@ class Bot:
         before = timedelta(minutes=self.cfg["watch_before_minutes"])
         after = timedelta(minutes=self.cfg["watch_after_kickoff_minutes"])
         for m in self.matches():
-            if self.st.match(m.id)["result_sent"]:
+            ms = self.st.match(m.id)
+            if ms["result_sent"] or ms.get("final_sent"):   # после сирены протокол ждёт catch_up_results
                 continue
             if m.kickoff_dt - before <= now <= m.kickoff_dt + after:
                 return m
@@ -201,6 +202,10 @@ class Bot:
                 if self.now() >= kick - timedelta(minutes=15):
                     p = self.site.protocol(m)
                     if p.finished:
+                        # Последний гол (в том числе в овертайме) часто приходит вместе с сиреной.
+                        # Победный буллит голом не считаем.
+                        if not (p.score_type or "").upper().startswith("Б"):
+                            self.live_updates(m, p, ms)
                         self.on_finished(m, p, ms)
                         return
                     changed = self.live_updates(m, p, ms)
@@ -315,11 +320,12 @@ class Bot:
         return len(p.goals) >= need and (need == 0 or bool(p.forwards))
 
     def on_finished(self, m: Match, p, ms: dict) -> None:
-        """Финальная сирена: сразу счёт, подробный итог — когда протокол заполнен."""
+        """Финальная сирена: сразу счёт, подробный итог — когда протокол заполнен.
+        Лига заполняет протокол через несколько часов, а бывает и на следующий день."""
         now = self.now()
         ms["goals"] = sorted(set(ms["goals"]) | {g.key for g in p.goals})   # без «залпа» голов
         final_at = ms.get("final_sent")
-        waited_long = final_at and now - datetime.fromisoformat(final_at) > timedelta(hours=4)
+        waited_long = final_at and now - datetime.fromisoformat(final_at) > timedelta(hours=36)
         if self.protocol_complete(p) or waited_long:
             self.send_result(m, p, ms)
         elif not final_at:

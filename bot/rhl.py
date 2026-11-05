@@ -233,7 +233,9 @@ class RHL:
                 p.home, p.away = _text(names[0]), _text(names[1])
             p.score = _text(hero.select_one(".matchcenter-hero__score-main"))
             p.status = _text(hero.select_one(".matchcenter-hero__status-name"))
-            p.finished = any("--winner-" in c for c in hero.get("class", []))
+            # После сирены сайт то ставит «--winner-», то пишет «матч завершен» без него.
+            p.finished = (any("--winner-" in c for c in hero.get("class", []))
+                          or "заверш" in p.status.lower())
 
         # Лента матчей в шапке сайта: статус и «ОТ»/«Б».
         for feed in soup.select("a.matches-feed__match"):

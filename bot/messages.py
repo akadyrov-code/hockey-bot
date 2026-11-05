@@ -197,7 +197,8 @@ class Texts:
         return (f"🏁 <b>Финальная сирена!</b>\n{self.scoreline(home, away, p.score)}{extra}\n"
                 f"{self._verdict(home, away, p.score)}\n\n"
                 f"Подробный итог — голы, передачи, статистику {escape(self.first_gen)} — пришлю, "
-                "как только лига заполнит протокол.")
+                "как только лига заполнит протокол: обычно через несколько часов, "
+                "иногда на следующий день.")
 
     # --- живые события по счёту (пока протокол не заполнен)
 
@@ -209,7 +210,7 @@ class Texts:
         home, away = p.home or m.home, p.away or m.away
         ours = self.ours(home if scoring_side == "home" else away)
         head = (f"🚨 <b>ГОЛ! «{escape(self.team)}» забивает!</b>" if ours else "😤 Гол в наши ворота")
-        when = f"\n⏱ {escape(p.status)}" if p.status else ""
+        when = f"\n⏱ {escape(p.status)}" if p.status and not p.finished else ""
         return (f"{head}\n{self.scoreline(home, away, score)}{when}\n"
                 "<i>Кто забил и кто отдал передачи — пришлю, как только лига внесёт в протокол.</i>")
 
