@@ -203,7 +203,8 @@ class Bot:
                     if p.finished:
                         self.on_finished(m, p, ms)
                         return
-                    if self.process_protocol(m, p, ms):
+                    changed = self.live_updates(m, p, ms)
+                    if self.process_protocol(m, p, ms) or changed:
                         self.st.checkpoint()
             except Exception:
                 log(f"Ошибка во время матча:\n{traceback.format_exc()}")
@@ -232,27 +233,68 @@ class Bot:
                 ms["reminder_sent"] = True
                 self.st.checkpoint()
 
+    def live_updates(self, m: Match, p, ms: dict) -> bool:
+        """Во время игры сайт лиги показывает только счёт и стадию («1-й период», «1-й перерыв»).
+        Голы объявляем по изменению счёта; авторов — когда лига заполнит протокол."""
+        sent = False
+        if p.status and "период" in p.status.lower() and not ms.get("started_sent"):
+            ms["started_sent"] = True
+            if not ms.get("score_seen"):
+                self.send(self.t.match_started(m, p))
+                sent = True
+        try:
+            h, a = (int(x) for x in p.score.split(":"))
+        except ValueError:
+            return sent
+        ph, pa = (int(x) for x in ms.get("score_seen", "0:0").split(":"))
+        if (h, a) != (ph, pa):
+            if h >= ph and a >= pa:
+                ch, ca = ph, pa
+                for side, n in (("home", h - ph), ("away", a - pa)):
+                    for _ in range(n):
+                        ch, ca = (ch + 1, ca) if side == "home" else (ch, ca + 1)
+                        self.send(self.t.live_goal(m, p, side, f"{ch}:{ca}"))
+                ms["announced"] = ms.get("announced", 0) + (h - ph) + (a - pa)
+            else:                                   # гол отменили
+                self.send(self.t.score_corrected(m, p))
+                ms["announced"] = h + a
+            ms["score_seen"] = f"{h}:{a}"
+            sent = True
+        status = p.status or ""
+        if status and status not in ms.setdefault("statuses", []):
+            ms["statuses"].append(status)
+            low = status.lower()
+            if "перерыв" in low or low.startswith(("овертайм", "буллит")):
+                self.send(self.t.break_status(m, p))
+                sent = True
+        return sent
+
     def process_protocol(self, m: Match, p, ms: dict) -> bool:
-        """Во время игры: новые голы (все), голы и передачи Данила (в т.ч. дописанные
-        в протокол позже), удаления Данила. Возвращает True, если что-то отправлено."""
+        """Если протокол заполняют по ходу игры: подробности голов (уже объявленные по счёту
+        не повторяем), голы и передачи Данила, удаления Данила."""
         sent = False
         pid = self.cfg["player"]["id"]
         assists, scored = ms.setdefault("assists", []), ms.setdefault("scored", [])
-        for g in p.goals:
+        for i, g in enumerate(p.goals, 1):
             new = g.key not in ms["goals"]
+            announced = i <= ms.get("announced", 0)     # этот гол уже объявили по счёту
             if new:
                 ms["goals"].append(g.key)
-                self.send(self.t.goal(m, p, g))
-                sent = True
+                if not announced:
+                    self.send(self.t.goal(m, p, g))
+                    ms["announced"] = i
+                    ms["score_seen"] = g.score or ms.get("score_seen", "0:0")
+                    sent = True
+            told_with_details = new and not announced    # подробное сообщение уже упомянуло Данила
             if any(a == pid for a, _ in g.assists) and g.key not in assists:
                 assists.append(g.key)
-                if not new:                       # ассистентов дописали после гола
+                if not told_with_details:
                     self.send(self.t.late_assist(m, p, g))
                     sent = True
             if g.scorer_id == pid and g.key not in scored:
                 scored.append(g.key)
-                if not new:                       # гол переписали на Данила
-                    self.send(self.t.late_goal(m, p, g))
+                if not told_with_details:
+                    self.send(self.t.danil_goal_details(m, p, g))
                     sent = True
         for pen in p.penalties:
             if pen.player_id != pid or pen.key in ms["penalties"]:

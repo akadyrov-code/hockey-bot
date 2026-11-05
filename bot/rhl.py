@@ -107,6 +107,7 @@ class Protocol:
     score: str = ""
     finished: bool = False
     score_type: str = ""    # ОТ / Б
+    status: str = ""        # «1-й период», «1-й перерыв»… — обновляется во время игры
     goals: list[Goal] = field(default_factory=list)
     penalties: list[Penalty] = field(default_factory=list)
     player_line: dict[str, str] | None = None
@@ -231,6 +232,7 @@ class RHL:
             if len(names) >= 2:
                 p.home, p.away = _text(names[0]), _text(names[1])
             p.score = _text(hero.select_one(".matchcenter-hero__score-main"))
+            p.status = _text(hero.select_one(".matchcenter-hero__status-name"))
             p.finished = any("--winner-" in c for c in hero.get("class", []))
 
         # Лента матчей в шапке сайта: статус и «ОТ»/«Б».

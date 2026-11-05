@@ -199,9 +199,36 @@ class Texts:
                 f"Подробный итог — голы, передачи, статистику {escape(self.first_gen)} — пришлю, "
                 "как только лига заполнит протокол.")
 
+    # --- живые события по счёту (пока протокол не заполнен)
+
+    def match_started(self, m: Match, p: Protocol) -> str:
+        return (f"🏒 <b>Матч начался!</b>\n{escape(p.home or m.home)} — {escape(p.away or m.away)}\n"
+                "Голы буду присылать по ходу игры.")
+
+    def live_goal(self, m: Match, p: Protocol, scoring_side: str, score: str) -> str:
+        home, away = p.home or m.home, p.away or m.away
+        ours = self.ours(home if scoring_side == "home" else away)
+        head = (f"🚨 <b>ГОЛ! «{escape(self.team)}» забивает!</b>" if ours else "😤 Гол в наши ворота")
+        when = f"\n⏱ {escape(p.status)}" if p.status else ""
+        return (f"{head}\n{self.scoreline(home, away, score)}{when}\n"
+                "<i>Кто забил и кто отдал передачи — пришлю, как только лига внесёт в протокол.</i>")
+
+    def score_corrected(self, m: Match, p: Protocol) -> str:
+        return f"⚠️ Счёт поправили: {self.scoreline(p.home or m.home, p.away or m.away, p.score)}"
+
+    def break_status(self, m: Match, p: Protocol) -> str:
+        return f"⏸ <b>{escape(p.status)}</b>\n{self.scoreline(p.home or m.home, p.away or m.away, p.score)}"
+
+    def danil_goal_details(self, m: Match, p: Protocol, g: Goal) -> str:
+        who = f"🏒 {self.who(g.scorer_id, g.scorer)}"
+        if g.assists:
+            who += " (" + ", ".join(self.who(pid, n) for pid, n in g.assists) + ")"
+        return (f"🔥 <b>Это был гол {escape(self.first_gen)}!</b>\n"
+                f"⏱ {escape(g.time)}, {period_name(g.period)} · счёт {escape(g.score)}\n{who}")
+
     def late_assist(self, m: Match, p: Protocol, g: Goal) -> str:
         return (f"🅰️ <b>Передача {escape(self.first_gen)}!</b>\n"
-                f"В протокол добавили ассистентов гола на {escape(g.time)} ({period_name(g.period)}):\n"
+                f"⏱ {escape(g.time)}, {period_name(g.period)} · счёт {escape(g.score)}\n"
                 f"🏒 {self.who(g.scorer_id, g.scorer)} ("
                 + ", ".join(self.who(pid, n) for pid, n in g.assists) + ")")
 
@@ -294,6 +321,12 @@ class Texts:
         text += "\n"
         if p.player_line:
             text += f"⭐ <b>{escape(self.full)}</b>: {self.line(p.player_line)}\n"
+            for g in p.goals:
+                if g.scorer_id == self.pid:
+                    text += f"   • гол на {escape(g.time)} ({period_name(g.period)})\n"
+                elif any(pid == self.pid for pid, _ in g.assists):
+                    text += (f"   • передача на {escape(g.time)} (забил "
+                             f"{escape(g.scorer.split()[-1] if g.scorer else '?')})\n")
         else:
             text += f"{escape(self.first)} в протоколе этого матча не значится.\n"
         text += self.forwards_block(f"Нападающие «{escape(self.team_gen)}» за матч",
