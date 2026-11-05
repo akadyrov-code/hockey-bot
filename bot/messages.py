@@ -182,6 +182,33 @@ class Texts:
             text += f"\n\n🅰️ <b>Передача {escape(self.first_gen)}!</b>"
         return text
 
+    def _verdict(self, home: str, away: str, score: str) -> str:
+        try:
+            h, a = (int(x) for x in score.split(":"))
+        except ValueError:
+            return ""
+        won = (h > a) == self.ours(home)
+        return (f"✅ «{escape(self.team)}» побеждает!" if won
+                else f"❌ «{escape(self.team)}» уступает")
+
+    def final_whistle(self, m: Match, p: Protocol) -> str:
+        home, away = p.home or m.home, p.away or m.away
+        extra = f" ({escape(p.score_type)})" if p.score_type else ""
+        return (f"🏁 <b>Финальная сирена!</b>\n{self.scoreline(home, away, p.score)}{extra}\n"
+                f"{self._verdict(home, away, p.score)}\n\n"
+                f"Подробный итог — голы, передачи, статистику {escape(self.first_gen)} — пришлю, "
+                "как только лига заполнит протокол.")
+
+    def late_assist(self, m: Match, p: Protocol, g: Goal) -> str:
+        return (f"🅰️ <b>Передача {escape(self.first_gen)}!</b>\n"
+                f"В протокол добавили ассистентов гола на {escape(g.time)} ({period_name(g.period)}):\n"
+                f"🏒 {self.who(g.scorer_id, g.scorer)} ("
+                + ", ".join(self.who(pid, n) for pid, n in g.assists) + ")")
+
+    def late_goal(self, m: Match, p: Protocol, g: Goal) -> str:
+        return (f"🔥 <b>Гол на {escape(g.time)} записали на {escape(self.first_gen)}!</b>\n"
+                f"{self.scoreline(p.home or m.home, p.away or m.away, g.score)}")
+
     def penalty(self, m: Match, p: Protocol, pen: Penalty) -> str:
         home, away = p.home or m.home, p.away or m.away
         per = period_by_time(pen.time)
@@ -229,7 +256,9 @@ class Texts:
             text += line + "\n"
         rp, rg = self.rank_of(rows, "points"), self.rank_of(rows, "goals")
         if rp:
-            text += f"{escape(self.first)}: {rp}-й по очкам, {rg}-й по голам среди нападающих\n"
+            text += f"{escape(self.first)}: {rp}-й по очкам"
+            text += f", {rg}-й по голам" if season else ""
+            text += " среди нападающих\n"
         return text
 
     def result(self, m: Match, p: Protocol, video: str | None, season_fw: list | None = None) -> str:
@@ -426,6 +455,53 @@ class Texts:
             icons = "".join("✅" if f == "W" else "❌" for f in row.form[-5:])
             notes.append(f"Форма в последних играх: {icons}")
         return notes
+
+    # --- лидеры команды и конференции
+
+    LEADER_LISTS = (("points", "🎯 Бомбардиры", ("points", "goals")),
+                    ("goals", "🥅 Снайперы", ("goals", "points")),
+                    ("a", "🅰️ Ассистенты", ("a", "points")))
+
+    def _leader_line(self, i: int, r: dict, field: str, with_team: bool) -> str:
+        name = self.surname(r["id"], r["name"])
+        team = f" ({escape(r['team'])})" if with_team else ""
+        val = r[field]
+        extra = f" ({r['goals']}+{r['a']})" if field == "points" else ""
+        return f"{i}. {name}{team} — {val}{extra}"
+
+    def _leader_block(self, rows: list[dict], with_team: bool, top: int) -> tuple[str, dict]:
+        text, ranks = "", {}
+        for field, title, keys in self.LEADER_LISTS:
+            ranked = sorted(rows, key=lambda r: tuple(r[k] for k in keys), reverse=True)
+            me = next((r for r in rows if r["id"] == self.pid), None)
+            if me:
+                ranks[field] = 1 + sum(1 for r in rows if r[field] > me[field])
+            text += f"\n{title}\n"
+            for i, r in enumerate(ranked[:top], 1):
+                text += self._leader_line(i, r, field, with_team) + "\n"
+            if me and me not in ranked[:top]:
+                text += "…\n" + self._leader_line(ranks[field], me, field, with_team) + "\n"
+        return text, ranks
+
+    def leaders(self, team_rows: list[dict], conf_rows: list[dict], conf_name: str, today: date) -> str:
+        text = f"🏆 <b>Лидеры на {day_str(today)}</b>\n"
+        team_ranks = conf_ranks = {}
+        if team_rows:
+            block, team_ranks = self._leader_block(team_rows, with_team=False, top=5)
+            text += f"\n<b>«{escape(self.team)}»</b>\n" + block
+        if conf_rows:
+            block, conf_ranks = self._leader_block(conf_rows, with_team=True, top=5)
+            text += f"\n<b>Конференция «{escape(conf_name)}»</b>\n" + block
+        def fmt(r: dict) -> str:
+            names = {"points": "по очкам", "goals": "по голам", "a": "по передачам"}
+            return ", ".join(f"{v}-й {names[k]}" for k, v in r.items())
+        if team_ranks or conf_ranks:
+            text += f"\n⭐ <b>{escape(self.first)}</b>"
+            if team_ranks:
+                text += f"\nв команде: {fmt(team_ranks)}"
+            if conf_ranks:
+                text += f"\nв конференции: {fmt(conf_ranks)}"
+        return text.rstrip()
 
     def welcome(self) -> str:
         return (

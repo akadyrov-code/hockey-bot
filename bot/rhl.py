@@ -357,6 +357,31 @@ class RHL:
         table = soup.select_one("table")
         return self._stat_rows(table, "stats-personal__position-table-col-param") if table else []
 
+    def skaters(self, team_id: int | None = None) -> list[dict]:
+        """Полевые игроки (нападающие + защитники) за сезон: вся лига или одна команда.
+        Лига отдаёт до 200 лучших по очкам в каждом амплуа — для лидеров этого хватает."""
+        out = []
+        for pos in ("forwards", "defenses"):
+            path = f"/stat/players/season/{self.season}/tournament/{self.tournament}/position/{pos}/"
+            if team_id:
+                path += f"?teamId={team_id}"
+            table = self.get(path).select_one("table")
+            for tr in table.select("tbody tr") if table else []:
+                a = tr.select_one("a.person-name-with-meta__name") or next(
+                    (x for x in tr.select("a[href*='/players/']") if x.get_text(strip=True)), None)
+                if not a:
+                    continue
+                t = tr.select_one("a.team-name-std") or next(
+                    (x for x in tr.select("a[href^='/teams/']") if x.get_text(strip=True)), None)
+                pid = PLAYER_HREF.search(a.get("href", ""))
+                tid = re.search(r"/teams/(\d+)/", t.get("href", "")) if t else None
+                prm = _params(tr, "stats-personal__position-table-col-param")
+                row = {"id": int(pid.group(1)) if pid else 0, "name": _person_name(a),
+                       "team": _text(t) if t else "", "team_id": int(tid.group(1)) if tid else 0}
+                row.update({k: _int(prm.get(k, "0")) for k in ("matches", "goals", "a", "points", "pm")})
+                out.append(row)
+        return out
+
     @staticmethod
     def _stat_rows(node, prefix: str) -> list:
         rows = []

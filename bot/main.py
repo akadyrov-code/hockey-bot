@@ -97,6 +97,7 @@ class Bot:
         self.safe(self.postgame_digests)
         self.safe(self.maybe_daily)
         self.safe(self.maybe_weekly)
+        self.safe(self.maybe_leaders)
         self.safe(self.league_news)
         self.safe(self.vk_news)
         self.safe(self.vk_photos)
@@ -197,11 +198,11 @@ class Bot:
                         self.st.checkpoint()
                 if self.now() >= kick - timedelta(minutes=15):
                     p = self.site.protocol(m)
+                    if p.finished:
+                        self.on_finished(m, p, ms)
+                        return
                     if self.process_protocol(m, p, ms):
                         self.st.checkpoint()
-                    if p.finished:
-                        self.send_result(m, p, ms)
-                        return
             except Exception:
                 log(f"Ошибка во время матча:\n{traceback.format_exc()}")
             self.sleep(poll)
@@ -230,15 +231,27 @@ class Bot:
                 self.st.checkpoint()
 
     def process_protocol(self, m: Match, p, ms: dict) -> bool:
-        """Шлёт новые голы (все) и удаления Данила. Возвращает True, если что-то отправлено."""
+        """Во время игры: новые голы (все), голы и передачи Данила (в т.ч. дописанные
+        в протокол позже), удаления Данила. Возвращает True, если что-то отправлено."""
         sent = False
         pid = self.cfg["player"]["id"]
+        assists, scored = ms.setdefault("assists", []), ms.setdefault("scored", [])
         for g in p.goals:
-            if g.key in ms["goals"]:
-                continue
-            ms["goals"].append(g.key)
-            self.send(self.t.goal(m, p, g))
-            sent = True
+            new = g.key not in ms["goals"]
+            if new:
+                ms["goals"].append(g.key)
+                self.send(self.t.goal(m, p, g))
+                sent = True
+            if any(a == pid for a, _ in g.assists) and g.key not in assists:
+                assists.append(g.key)
+                if not new:                       # ассистентов дописали после гола
+                    self.send(self.t.late_assist(m, p, g))
+                    sent = True
+            if g.scorer_id == pid and g.key not in scored:
+                scored.append(g.key)
+                if not new:                       # гол переписали на Данила
+                    self.send(self.t.late_goal(m, p, g))
+                    sent = True
         for pen in p.penalties:
             if pen.player_id != pid or pen.key in ms["penalties"]:
                 continue
@@ -247,24 +260,49 @@ class Bot:
             sent = True
         return sent
 
+    @staticmethod
+    def protocol_complete(p) -> bool:
+        """Лига заполняет протокол (голы, передачи, статистика) не сразу после сирены."""
+        try:
+            h, a = (int(x) for x in p.score.split(":"))
+        except ValueError:
+            return False
+        need = h + a - (1 if (p.score_type or "").upper().startswith("Б") else 0)
+        return len(p.goals) >= need and (need == 0 or bool(p.forwards))
+
+    def on_finished(self, m: Match, p, ms: dict) -> None:
+        """Финальная сирена: сразу счёт, подробный итог — когда протокол заполнен."""
+        now = self.now()
+        ms["goals"] = sorted(set(ms["goals"]) | {g.key for g in p.goals})   # без «залпа» голов
+        final_at = ms.get("final_sent")
+        waited_long = final_at and now - datetime.fromisoformat(final_at) > timedelta(hours=4)
+        if self.protocol_complete(p) or waited_long:
+            self.send_result(m, p, ms)
+        elif not final_at:
+            self.send(self.t.final_whistle(m, p))
+            ms["final_sent"] = now.isoformat()
+            self.st.checkpoint()
+
     def send_result(self, m: Match, p, ms: dict) -> None:
         video = ms.get("live_sent") or self.safe(self.site.video_link, m)
         self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
         ms["result_sent"] = True
-        ms["postgame_after"] = (self.now() + timedelta(minutes=30)).isoformat()
+        ms["postgame_after"] = (self.now() + timedelta(minutes=20)).isoformat()
         self.st.checkpoint()
 
     def catch_up_results(self) -> None:
-        """Итоги матчей, за которыми не удалось проследить (например, GitHub не запустил бота)."""
+        """Подробные итоги, которые ждут заполнения протокола, и матчи,
+        за которыми не удалось проследить вживую."""
         now = self.now()
         for m in self.matches():
             ms = self.st.match(m.id)
-            if ms["result_sent"] or not (now - timedelta(days=2) < m.kickoff_dt < now - timedelta(hours=2)):
+            if ms["result_sent"] or not (now - timedelta(days=2) < m.kickoff_dt < now - timedelta(minutes=90)):
                 continue
+            if not ms.get("final_sent") and m.kickoff_dt > now - timedelta(hours=2):
+                continue                                  # матч ещё идёт — им занят watch()
             p = self.safe(self.site.protocol, m)
             if p and p.finished:
-                ms["goals"] = [g.key for g in p.goals]   # голы задним числом не шлём
-                self.send_result(m, p, ms)
+                self.on_finished(m, p, ms)
 
     # ------------------------------------------------------------ сводки
 
@@ -285,6 +323,27 @@ class Bot:
                             self.our_conference(), self.next_match(), now,
                             self.safe(self.site.team_forwards_season), title)
 
+    def stats_updated(self, match_id: int) -> bool:
+        """Сайт учёл матч: он есть в играх Данила, его голы/передачи там совпадают
+        с протоколом, а сезонные итоги — с суммой по играм."""
+        games = self.site.player_games()
+        row = next((g for g in games if g["match_id"] == match_id), None)
+        if not row:
+            return False
+        sched = self.st.get("schedule", {}).get(str(match_id))
+        if sched:
+            p = self.site.protocol(Match(**sched))
+            if p.player_line and any(int(row["stats"].get(k) or 0) != int(p.player_line.get(k) or 0)
+                                     for k in ("goals", "a")):
+                return False
+        season = self.site.player_season()
+        if season:
+            st = season[0][1]
+            for k in ("goals", "a"):
+                if int(st.get(k) or 0) != sum(int(g["stats"].get(k) or 0) for g in games):
+                    return False
+        return True
+
     def postgame_digests(self) -> None:
         """Сводка после матча — когда лига обновит сезонную статистику (обычно через 30–60 мин)."""
         now = self.now()
@@ -292,8 +351,7 @@ class Bot:
             after = ms.get("postgame_after")
             if not after or ms.get("postgame_sent") or now < datetime.fromisoformat(after):
                 continue
-            played = any(str(g["match_id"]) == mid for g in self.site.player_games())
-            if not played and now < datetime.fromisoformat(after) + timedelta(hours=3):
+            if not self.stats_updated(int(mid)) and now < datetime.fromisoformat(after) + timedelta(hours=3):
                 continue                      # статистику ещё не обновили — подождём
             self.send(self.digest("📋 Сводка после матча"))
             ms["postgame_sent"] = True
@@ -327,6 +385,26 @@ class Bot:
         if row:
             self.st["standings_snap"] = {"date": now.date().isoformat(), "pos": row.pos, "points": row.points}
         self.st["last_weekly"] = week
+        self.st.checkpoint()
+
+    def leaders_text(self) -> str:
+        conf = self.our_conference()
+        team_rows = self.site.skaters(self.cfg["team"]["id"])
+        conf_rows = []
+        if conf:
+            ids = {r.team_id for r in conf.rows}
+            conf_rows = [r for r in self.site.skaters() if r["team_id"] in ids]
+        return self.t.leaders(team_rows, conf_rows, conf.name if conf else "", self.now().date())
+
+    def maybe_leaders(self) -> None:
+        """Бомбардиры, снайперы и ассистенты — по понедельникам и четвергам вечером."""
+        now = self.now()
+        if (now.weekday() not in self.cfg.get("leaders_weekdays", [0, 3])
+                or now.hour < self.cfg.get("leaders_hour", 20)
+                or self.st.get("last_leaders") == now.date().isoformat()):
+            return
+        self.send(self.leaders_text())
+        self.st["last_leaders"] = now.date().isoformat()
         self.st.checkpoint()
 
     def our_conference(self):
