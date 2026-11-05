@@ -20,6 +20,20 @@ import requests
 QUEUE = Path(__file__).resolve().parent.parent / "content" / "queue.json"
 
 
+def load_image(path: str) -> bytes | None:
+    """Картинка из репозитория (content/img/...): на GitHub — свежая версия, локально — с диска."""
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    if repo:
+        try:
+            r = requests.get(f"https://raw.githubusercontent.com/{repo}/main/{path}", timeout=30)
+            if r.status_code == 200:
+                return r.content
+        except requests.RequestException as e:
+            print(f"[extras] картинка {path} не загрузилась: {e}")
+    local = QUEUE.parent.parent / path
+    return local.read_bytes() if local.exists() else None
+
+
 def load_queue() -> list[dict]:
     repo = os.environ.get("GITHUB_REPOSITORY")
     if repo:
@@ -53,8 +67,8 @@ def validate(item: dict) -> str | None:
             return "пустой text"
         if len(text) + len(item.get("title", "")) > 3500:
             return "text длиннее 3500 символов"
-    elif kind == "quiz":
-        q, opts, ok = item.get("question", ""), item.get("options"), item.get("correct")
+    elif kind in ("quiz", "poll"):
+        q, opts = item.get("question", ""), item.get("options")
         if not q.strip() or len(q) > 300:
             return "question пустой или длиннее 300 символов"
         if not isinstance(opts, list) or not 2 <= len(opts) <= 10:
@@ -63,12 +77,22 @@ def validate(item: dict) -> str | None:
             return "каждый вариант — непустая строка до 100 символов"
         if len(set(opts)) != len(opts):
             return "варианты повторяются"
-        if not isinstance(ok, int) or not 0 <= ok < len(opts):
-            return "correct — номер правильного варианта с нуля"
-        if len(item.get("explanation", "")) > 200:
-            return "explanation длиннее 200 символов"
+        if kind == "quiz":
+            ok = item.get("correct")
+            if not isinstance(ok, int) or not 0 <= ok < len(opts):
+                return "correct — номер правильного варианта с нуля"
+            if len(item.get("explanation", "")) > 200:
+                return "explanation длиннее 200 символов"
+    elif kind == "photo":
+        img = item.get("image", "")
+        if not img.startswith("content/img/") or not img.lower().endswith((".png", ".jpg", ".jpeg")):
+            return "image — путь вида content/img/<имя>.png"
+        if len(item.get("caption", "")) > 1000:
+            return "caption длиннее 1000 символов"
+        if not (QUEUE.parent.parent / img).exists() and not os.environ.get("GITHUB_REPOSITORY"):
+            return f"нет файла {img}"
     else:
-        return "type должен быть text или quiz"
+        return "type должен быть text, quiz, poll или photo"
     return None
 
 

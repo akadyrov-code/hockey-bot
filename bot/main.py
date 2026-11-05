@@ -478,6 +478,16 @@ class Bot:
                 if it["type"] == "quiz":
                     self.tg.send_quiz(it["question"], it["options"], it["correct"], it.get("explanation", ""))
                     log("Отправлено: викторина " + it["question"][:60])
+                elif it["type"] == "poll":
+                    self.tg.send_poll(it["question"], it["options"])
+                    log("Отправлено: опрос " + it["question"][:60])
+                elif it["type"] == "photo":
+                    img = extras.load_image(it["image"])
+                    if not img:
+                        log(f"Дополнение {it['id']}: картинка {it['image']} не найдена")
+                        continue                  # попробуем в следующий раз
+                    self.tg.send_photos([img], escape(it.get("caption", "")))
+                    log("Отправлено: картинка " + it["image"])
                 else:
                     title = f"<b>{escape(it['title'])}</b>\n\n" if it.get("title") else ""
                     self.send(title + escape(it["text"]))

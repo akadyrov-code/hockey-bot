@@ -56,6 +56,14 @@ class Telegram:
             params["explanation"] = explanation
         self._call("sendPoll", **params)
 
+    def send_poll(self, question: str, options: list[str]) -> None:
+        """Обычный опрос (без правильного ответа), анонимный — в каналах иначе нельзя."""
+        if self.dry_run:
+            print(f"\n----- [опрос] -----\n{question}\n" + "\n".join(f"  ▫️ {o}" for o in options) + "\n-----")
+            return
+        self._call("sendPoll", chat_id=self.chat_id, question=question, is_anonymous=True,
+                   options=[{"text": o} for o in options])
+
     def send_photos(self, photos: list[bytes], caption: str) -> None:
         """Альбом до 10 фото, подпись — у первого."""
         for i in range(0, len(photos), 10):
