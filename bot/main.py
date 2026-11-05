@@ -114,7 +114,10 @@ class Bot:
             return None
 
     def send(self, text: str, preview: bool = False) -> None:
-        self.tg.send(text, preview=preview)
+        # Ночью (лига заполняет протоколы ближе к полуночи) — без звука уведомления.
+        start, end = self.cfg.get("quiet_hours", [23, 8])
+        hour = self.now().hour
+        self.tg.send(text, preview=preview, silent=hour >= start or hour < end)
         log("Отправлено: " + text.splitlines()[0])
 
     # ------------------------------------------------------------ канал
@@ -321,7 +324,7 @@ class Bot:
 
     def on_finished(self, m: Match, p, ms: dict) -> None:
         """Финальная сирена: сразу счёт, подробный итог — когда протокол заполнен.
-        Лига заполняет протокол через несколько часов, а бывает и на следующий день."""
+        Лига заполняет протоколы пачкой ближе к ночи (5 ноября — в 00:40–01:20 за весь игровой день)."""
         now = self.now()
         ms["goals"] = sorted(set(ms["goals"]) | {g.key for g in p.goals})   # без «залпа» голов
         final_at = ms.get("final_sent")

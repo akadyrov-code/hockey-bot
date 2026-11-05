@@ -30,6 +30,7 @@
   "watch_before_minutes": 75,
   "watch_after_kickoff_minutes": 200,
   "poll_seconds": 60,
+  "quiet_hours": [23, 8],
 
   "vk": {
     "groups": ["mhc_kristall"],

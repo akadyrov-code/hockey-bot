@@ -32,9 +32,10 @@ class Telegram:
             raise RuntimeError(f"Telegram {method}: {data.get('description')}")
         raise RuntimeError(f"Telegram {method}: нет ответа")
 
-    def send(self, text: str, preview: bool = False) -> None:
+    def send(self, text: str, preview: bool = False, silent: bool = False) -> None:
         if self.dry_run:
-            print("\n----- [сообщение в канал] -----\n" + text + "\n-------------------------------")
+            tag = " (без звука)" if silent else ""
+            print(f"\n----- [сообщение в канал{tag}] -----\n" + text + "\n-------------------------------")
             return
         self._call(
             "sendMessage",
@@ -42,6 +43,7 @@ class Telegram:
             text=text,
             parse_mode="HTML",
             link_preview_options={"is_disabled": not preview},
+            disable_notification=silent,
         )
 
     def send_quiz(self, question: str, options: list[str], correct: int, explanation: str = "") -> None:
