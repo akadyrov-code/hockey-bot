@@ -44,6 +44,18 @@ class Telegram:
             link_preview_options={"is_disabled": not preview},
         )
 
+    def send_quiz(self, question: str, options: list[str], correct: int, explanation: str = "") -> None:
+        """Викторина: опрос с правильным ответом (в канале — только анонимный)."""
+        if self.dry_run:
+            opts = "\n".join(f"  {'✅' if i == correct else '▫️'} {o}" for i, o in enumerate(options))
+            print(f"\n----- [викторина] -----\n{question}\n{opts}\n  ℹ️ {explanation}\n-----")
+            return
+        params = dict(chat_id=self.chat_id, question=question, type="quiz", is_anonymous=True,
+                      options=[{"text": o} for o in options], correct_option_id=correct)
+        if explanation:
+            params["explanation"] = explanation
+        self._call("sendPoll", **params)
+
     def send_photos(self, photos: list[bytes], caption: str) -> None:
         """Альбом до 10 фото, подпись — у первого."""
         for i in range(0, len(photos), 10):

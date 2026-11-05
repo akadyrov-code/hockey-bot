@@ -20,6 +20,7 @@ from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import extras
 from .messages import MONTHS, Texts, day_str
 from .photos import PhotoFinder
 from .rhl import RHL, Match
@@ -99,6 +100,7 @@ class Bot:
         self.safe(self.maybe_weekly)
         self.safe(self.maybe_leaders)
         self.safe(self.league_news)
+        self.safe(self.publish_extras)
         self.safe(self.vk_news)
         self.safe(self.vk_photos)
         self.st.save()
@@ -454,6 +456,34 @@ class Bot:
             self.send(self.digest("📋 Сводка после матча"))
         finally:
             self.tg.send = send
+
+    # ------------------------------------------------------------ дополнения от Claude
+
+    def publish_extras(self) -> None:
+        """Викторины и посты из content/queue.json (их готовит задача на Mac).
+        Публикуем в назначенное время; если опоздали больше чем на 12 часов — пропускаем."""
+        now = self.now()
+        sent = self.st.setdefault("extras_sent", [])
+        for it in extras.load_queue():
+            if it.get("id") in sent:
+                continue
+            err = extras.validate(it)
+            if err:
+                log(f"Дополнение {it.get('id')} пропущено: {err}")
+                continue
+            at = datetime.fromisoformat(it["publish_at"])
+            if at > now:
+                continue
+            if now - at <= timedelta(hours=12):
+                if it["type"] == "quiz":
+                    self.tg.send_quiz(it["question"], it["options"], it["correct"], it.get("explanation", ""))
+                    log("Отправлено: викторина " + it["question"][:60])
+                else:
+                    title = f"<b>{escape(it['title'])}</b>\n\n" if it.get("title") else ""
+                    self.send(title + escape(it["text"]))
+            sent.append(it["id"])
+            del sent[:-300]
+            self.st.checkpoint()
 
     # ------------------------------------------------------------ новости лиги
 
