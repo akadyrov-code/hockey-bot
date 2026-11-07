@@ -13,21 +13,22 @@
  "league_news_last": 51379,
  "matches": {
   "905245": {
-   "announced": 8,
+   "announced": 9,
    "assists": [],
    "goals": [],
    "live_sent": "https://vkvideo.ru/video-185096105_456239913",
    "penalties": [],
    "reminder_sent": true,
    "result_sent": false,
-   "score_seen": "3:5",
+   "score_seen": "4:5",
    "scored": [],
    "started_sent": true,
    "statuses": [
     "1-й период",
     "1-й перерыв",
     "2-й период",
-    "2-й перерыв"
+    "2-й перерыв",
+    "3-й период"
    ]
   },
   "905247": {
