@@ -13,14 +13,15 @@
  "league_news_last": 51379,
  "matches": {
   "905245": {
-   "announced": 11,
+   "announced": 12,
    "assists": [],
+   "final_sent": "2026-11-07T14:09:18.854943+03:00",
    "goals": [],
    "live_sent": "https://vkvideo.ru/video-185096105_456239913",
    "penalties": [],
    "reminder_sent": true,
    "result_sent": false,
-   "score_seen": "4:7",
+   "score_seen": "5:7",
    "scored": [],
    "started_sent": true,
    "statuses": [
@@ -28,7 +29,8 @@
     "1-й перерыв",
     "2-й период",
     "2-й перерыв",
-    "3-й период"
+    "3-й период",
+    "матч завершен"
    ]
   },
   "905247": {
