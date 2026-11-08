@@ -51,11 +51,17 @@
    ]
   },
   "905247": {
+   "assists": [],
    "goals": [],
    "live_sent": "https://vkvideo.ru/video-185096105_456239914",
    "penalties": [],
    "reminder_sent": true,
-   "result_sent": false
+   "result_sent": false,
+   "scored": [],
+   "started_sent": true,
+   "statuses": [
+    "1-й период"
+   ]
   },
   "905298": {
    "goals": [],
