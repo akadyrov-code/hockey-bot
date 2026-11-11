@@ -15,40 +15,11 @@
   "2026-11-11-quiz"
  ],
  "initialized": true,
- "last_daily": "2026-11-10",
+ "last_daily": "2026-11-11",
  "last_leaders": "2026-11-09",
  "last_weekly": "2026-W46",
  "league_news_last": 51383,
  "matches": {
-  "905247": {
-   "announced": 5,
-   "assists": [],
-   "final_sent": "2026-11-08T14:03:53.249930+03:00",
-   "goals": [
-    "1|03:54",
-    "1|17:49",
-    "2|29:31",
-    "3|46:33",
-    "3|59:01"
-   ],
-   "live_sent": "https://vkvideo.ru/video-185096105_456239914",
-   "penalties": [],
-   "postgame_after": "2026-11-08T22:04:57.733593+03:00",
-   "postgame_sent": true,
-   "reminder_sent": true,
-   "result_sent": true,
-   "score_seen": "1:4",
-   "scored": [],
-   "started_sent": true,
-   "statuses": [
-    "1-й период",
-    "1-й перерыв",
-    "2-й период",
-    "2-й перерыв",
-    "3-й период",
-    "матч завершен"
-   ]
-  },
   "905298": {
    "goals": [],
    "live_sent": "",
@@ -289,14 +260,6 @@
   }
  },
  "schedule": {
-  "905247": {
-   "away": "МХК Кристалл",
-   "home": "МХК Белгород",
-   "id": 905247,
-   "kickoff": "2026-11-08T12:00:00+03:00",
-   "place": "№ 137 Саратов",
-   "tournament": 1432
-  },
   "905298": {
    "away": "МХК Кристалл",
    "home": "ХК Самара",
