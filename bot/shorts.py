@@ -5,9 +5,10 @@ Claude смотрит на табло в кадрах трансляции, на
 Бот на GitHub ничего не режет — только публикует готовый файл из content/video/.
 
     python -m bot.shorts pending                      # голы, для которых ещё нет ролика
-    python -m bot.shorts sheet 905245 --every 300     # лист кадров с табло по всей записи
-    python -m bot.shorts sheet 905245 --from 1100 --to 1160 --every 5 [--full]
-    python -m bot.shorts cut 905245 1 --goal-at 1141  # ролик + лист кадров для проверки
+    python -m bot.shorts sheet 905245 --every 300     # обзор: кадры с табло по всей записи
+    python -m bot.shorts sheet 905245 --from 900 --to 1300 --every 25 [--full]
+    python -m bot.shorts window 905245 --around 1140  # скачать фрагмент и точный лист кадров
+    python -m bot.shorts cut 905245 1 --goal-at 47    # ролик (секунда фрагмента) + проверка
     python -m bot.shorts add 905245 1                 # поставить ролик в очередь бота
     python -m bot.shorts prune                        # убрать ролики, которых нет в очереди
 
@@ -174,10 +175,15 @@ def stream(site: RHL, match: Match) -> dict:
 
 
 def grab(st: dict, t: float, out: Path, vf: str) -> bool:
-    r = subprocess.run([ffmpeg(), "-loglevel", "error", "-y", "-headers", st["headers"],
+    out.unlink(missing_ok=True)
+    for _ in range(3):                    # сервер с видео иногда отвечает ошибкой
+        subprocess.run([ffmpeg(), "-loglevel", "error", "-y", "-headers", st["headers"],
                         "-ss", str(t), "-i", st["url"], "-frames:v", "1", "-vf", vf, str(out)],
                        capture_output=True, text=True)
-    return r.returncode == 0 and out.exists()
+        if out.exists():
+            return True
+        time.sleep(2)
+    return False
 
 
 def font(size: int, bold: bool = True):
@@ -222,7 +228,47 @@ def sheet(args) -> None:
         list(ex.map(lambda tp: grab(st, tp[0], tp[1][1], vf), zip(times, tiles)))
     out = work / f"sheet_{times[0]:g}_{times[-1]:g}{'_full' if args.full else ''}.jpg"
     contact_sheet(tiles, out, cols)
-    print(f"Длина записи: {st['duration']} c. Лист кадров: {out}")
+    print(f"Длина записи: {st['duration']} c. Лист кадров: {out}\n"
+          "Перемотка записи неточна (до ±10 c): точное время ищи командой window.")
+
+
+def window_paths(match_id: int) -> tuple[Path, Path]:
+    work = WORK / str(match_id)
+    return work / "window.mp4", work / "window.json"
+
+
+def window(args) -> None:
+    """Скачивает фрагмент записи вокруг примерного места гола и делает лист кадров.
+
+    Запись в VK перематывается неточно (до ±10 c), поэтому точную секунду гола ищем
+    в скачанном фрагменте: подписи на листе (w=...) и --goal-at у cut — секунды фрагмента."""
+    c = cfg()
+    site = site_for(c)
+    match, _ = find_match(site, args.match_id)
+    st = stream(site, match)
+    start = max(int(args.around - args.span / 2), 0)
+    video, meta = window_paths(match.id)
+    video.parent.mkdir(parents=True, exist_ok=True)
+    r = subprocess.run([
+        ffmpeg(), "-loglevel", "error", "-y", "-headers", st["headers"],
+        "-ss", str(start), "-t", str(args.span), "-i", st["url"],
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "aac", "-b:a", "128k",
+        str(video)], capture_output=True, text=True)
+    if r.returncode != 0 or not video.exists():
+        sys.exit("Не удалось скачать фрагмент:\n" + r.stderr[-1500:])
+    meta.write_text(json.dumps({"start": start, "span": args.span}))
+
+    times = [float(t) for t in range(0, int(args.span), int(args.every))]
+    vf, cols = ("scale=640:-2", 3) if args.full else ("scale=1280:-2,crop=480:150:0:0", 4)
+    tiles = [(f"w={t:g} c", video.parent / f"w_{t:g}.jpg") for t in times]
+    for t, (_, path) in zip(times, tiles):
+        path.unlink(missing_ok=True)
+        subprocess.run([ffmpeg(), "-loglevel", "error", "-y", "-ss", str(t), "-i", str(video),
+                        "-frames:v", "1", "-vf", vf, str(path)], capture_output=True)
+    out = video.parent / f"window_sheet{'_full' if args.full else ''}.jpg"
+    contact_sheet(tiles, out, cols)
+    print(f"Фрагмент: {args.span:g} c, начало около {start} c записи. Лист кадров: {out}\n"
+          "Подписи w=... — секунды фрагмента; их же передавай в cut --goal-at.")
 
 
 def title_overlay(c: dict, goal: dict, date: str, out: Path, video_top: int, video_h: int) -> None:
@@ -272,10 +318,17 @@ def cut(args) -> None:
     goals = goals_of(site, c, match)
     if not 1 <= args.n <= len(goals):
         sys.exit(f"В матче {args.match_id} у Данила {len(goals)} гол(ов), а запрошен №{args.n}")
-    goal, st = goals[args.n - 1], stream(site, match)
-    start, dur = max(args.goal_at - args.before, 0), args.before + args.after
-    work = WORK / str(match.id)
-    work.mkdir(parents=True, exist_ok=True)
+    goal = goals[args.n - 1]
+    video, meta = window_paths(match.id)
+    if not video.exists() or not meta.exists():
+        sys.exit("Сначала скачай фрагмент: python -m bot.shorts window <match_id> --around <секунда записи>")
+    win = json.loads(meta.read_text())
+    start, dur = args.goal_at - args.before, args.before + args.after
+    if start < 0 or start + dur > win["span"]:
+        around = int(win["start"] + args.goal_at)
+        sys.exit(f"Гол слишком близко к краю фрагмента ({win['span']:g} c). Скачай заново: "
+                 f"window {match.id} --around {around} — и найди гол на новом листе.")
+    work = video.parent
 
     zoom = max(1.0, min(args.zoom, 1.6))
     video_h = int(W * 9 / 16) // 2 * 2
@@ -291,8 +344,8 @@ def cut(args) -> None:
         f"[bg][fg]overlay=0:{video_top}[v1];[v1][1:v]overlay=0:0[v]"
     )
     r = subprocess.run([
-        ffmpeg(), "-loglevel", "error", "-y", "-headers", st["headers"],
-        "-ss", str(start), "-t", str(dur), "-i", st["url"], "-i", str(overlay),
+        ffmpeg(), "-loglevel", "error", "-y",
+        "-ss", str(start), "-t", str(dur), "-i", str(video), "-i", str(overlay),
         "-filter_complex", graph, "-map", "[v]", "-map", "0:a?",
         "-c:v", "libx264", "-preset", "medium", "-crf", "27", "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", str(out)],
@@ -363,10 +416,18 @@ def main() -> None:
     s.add_argument("--every", type=float, default=300)
     s.add_argument("--full", action="store_true", help="весь кадр, а не угол с табло")
     s.set_defaults(fn=sheet)
+    w = sub.add_parser("window")
+    w.add_argument("match_id", type=int)
+    w.add_argument("--around", type=float, required=True, help="примерная секунда записи с голом")
+    w.add_argument("--span", type=float, default=90, help="длина фрагмента, c")
+    w.add_argument("--every", type=float, default=3)
+    w.add_argument("--full", action="store_true", help="весь кадр, а не угол с табло")
+    w.set_defaults(fn=window)
     k = sub.add_parser("cut")
     k.add_argument("match_id", type=int)
     k.add_argument("n", type=int, help="номер гола Данила в матче, с 1")
-    k.add_argument("--goal-at", type=float, required=True, help="секунда записи, когда забит гол")
+    k.add_argument("--goal-at", type=float, required=True,
+                   help="секунда скачанного фрагмента (w=...), когда забит гол")
     k.add_argument("--before", type=float, default=9)
     k.add_argument("--after", type=float, default=16)
     k.add_argument("--zoom", type=float, default=1.0)
