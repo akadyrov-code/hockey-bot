@@ -20,8 +20,8 @@ from html import escape
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import extras
-from .messages import MONTHS, Texts, day_str
+from . import extras, milestones
+from .messages import MONTHS, Texts, day_str, short_team
 from .photos import PhotoFinder
 from .rhl import RHL, Match
 from .state import State
@@ -113,11 +113,14 @@ class Bot:
             log(f"Ошибка в {fn.__name__}:\n{traceback.format_exc()}")
             return None
 
-    def send(self, text: str, preview: bool = False) -> None:
-        # Ночью (лига заполняет протоколы ближе к полуночи) — без звука уведомления.
+    def quiet(self) -> bool:
+        """Ночью (лига заполняет протоколы ближе к полуночи) — без звука уведомления."""
         start, end = self.cfg.get("quiet_hours", [23, 8])
         hour = self.now().hour
-        self.tg.send(text, preview=preview, silent=hour >= start or hour < end)
+        return hour >= start or hour < end
+
+    def send(self, text: str, preview: bool = False) -> None:
+        self.tg.send(text, preview=preview, silent=self.quiet())
         log("Отправлено: " + text.splitlines()[0])
 
     # ------------------------------------------------------------ канал
@@ -336,9 +339,67 @@ class Bot:
             ms["final_sent"] = now.isoformat()
             self.st.checkpoint()
 
+    def prior_games(self, m: Match) -> list[dict]:
+        """Игры Данила в сезоне до этого матча, от новых к старым."""
+        day = m.kickoff_dt.astimezone(self.tz).date()
+        return [g for g in self.site.player_games()
+                if g["match_id"] != m.id and (d := parse_ru_date(g["date"])) and d < day]
+
+    def match_marks(self, m: Match, p, prior: list[dict]) -> list[str]:
+        """Вехи и рекорды Данила в этом матче."""
+        if not p.player_line:
+            return []
+        wins = 0
+        if self.t.won(p.home or m.home, p.score):
+            wins = 1
+            for g in prior:                       # победная серия команды
+                if g["winner"] != ("home" if self.t.ours(g["home"]) else "away"):
+                    break
+                wins += 1
+        return milestones.find(prior, int(p.player_line.get("goals") or 0),
+                               int(p.player_line.get("a") or 0), self.t.team, wins)
+
+    def send_card(self, m: Match, p, prior: list[dict], marks: list[str]) -> None:
+        """Картинка-итог матча: счёт и строка Данила — чтобы переслать родным."""
+        from . import card                        # Pillow нужен только здесь
+        home, away = p.home or m.home, p.away or m.away
+        when = m.kickoff_dt.astimezone(self.tz)
+        place = re.sub(r"^№\s*\d+\s*", "", m.place or "")
+        line = p.player_line
+        season = ""
+        if line:
+            season = self.t.season_short(milestones.season_totals(
+                prior, int(line.get("goals") or 0), int(line.get("a") or 0)))
+        image = getattr(self.site, "image", lambda _url: None)
+        logos = [image(u) for u in p.logos[:2]] + [None, None]
+        note = {"ОТ": "в овертайме", "Б": "по буллитам"}.get((p.score_type or "").upper()[:2].rstrip("."), "")
+        png = card.render(card.CardData(
+            home=short_team(home), away=short_team(away), score=p.score, note=note,
+            won=self.t.won(home, p.score),
+            when=f"{day_str(when, False)} {when.year}" + (f" · {place}" if place else ""),
+            player=self.t.full, number=self.t.number, line=line,
+            details=self.t.card_details(p), milestones=marks, season=season,
+            logos=(logos[0], logos[1])))
+        self.tg.send_photos([png], self.t.card_caption(m, p, marks), silent=self.quiet())
+        log("Отправлено: картинка-итог матча")
+
+    def result_messages(self, m: Match, p, video: str | None) -> None:
+        """Картинка-итог с вехами, за ней подробный итог. Если картинка не получилась —
+        вехи идут в текст."""
+        marks, card_sent = [], False
+        try:
+            prior = self.prior_games(m)
+            marks = self.match_marks(m, p, prior)
+            self.send_card(m, p, prior, marks)
+            card_sent = True
+        except Exception:
+            log(f"Картинка-итог не получилась:\n{traceback.format_exc()}")
+        self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season),
+                                marks=None if card_sent else marks))
+
     def send_result(self, m: Match, p, ms: dict) -> None:
         video = ms.get("live_sent") or self.safe(self.site.video_link, m)
-        self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
+        self.result_messages(m, p, video)
         ms["result_sent"] = True
         ms["postgame_after"] = (self.now() + timedelta(minutes=20)).isoformat()
         self.st.checkpoint()
@@ -410,12 +471,20 @@ class Bot:
             ms["postgame_sent"] = True
             self.st.checkpoint()
 
+    def match_soon(self, now: datetime) -> bool:
+        """Сегодня или завтра играет наша команда."""
+        return any(0 <= (m.kickoff_dt.astimezone(self.tz).date() - now.date()).days <= 1
+                   for m in self.matches())
+
     def maybe_daily(self) -> None:
+        """Сводка в полдень по будням — только накануне и в день матча: в остальные дни
+        цифры те же, что вчера, а после игры приходит «Сводка после матча»."""
         now = self.now()
         if not self.st.pop("force_daily", False) and (
                 now.weekday() not in self.cfg.get("daily_weekdays", range(7))   # 0 = понедельник
                 or now.hour < self.cfg["daily_hour"]
-                or self.st.get("last_daily") == now.date().isoformat()):
+                or self.st.get("last_daily") == now.date().isoformat()
+                or (self.cfg.get("daily_only_near_match", True) and not self.match_soon(now))):
             return
         self.send(self.digest())
         self.st["last_daily"] = now.date().isoformat()
@@ -450,7 +519,7 @@ class Bot:
         return self.t.leaders(team_rows, conf_rows, conf.name if conf else "", self.now().date())
 
     def maybe_leaders(self) -> None:
-        """Бомбардиры, снайперы и ассистенты — по понедельникам и четвергам вечером."""
+        """Бомбардиры, снайперы и ассистенты — по четвергам вечером (leaders_weekdays)."""
         now = self.now()
         if (now.weekday() not in self.cfg.get("leaders_weekdays", [0, 3])
                 or now.hour < self.cfg.get("leaders_hour", 20)
@@ -493,8 +562,8 @@ class Bot:
         p = self.site.parse_protocol(soup, m.id)
 
         send = self.tg.send
-        self.tg.send = lambda text, preview=False: (send("🧪 <b>ТЕСТ</b> · повтор матча\n\n" + text, preview),
-                                                    self.sleep(3))
+        self.tg.send = lambda text, preview=False, **kw: (
+            send("🧪 <b>ТЕСТ</b> · повтор матча\n\n" + text, preview, **kw), self.sleep(3))
         try:
             self.send(f"Повторяю матч {m.home} — {m.away} ({day_str(m.kickoff_dt, False)}) "
                       "так, как бот присылал бы его вживую.")
@@ -503,7 +572,7 @@ class Bot:
             if video:
                 self.send(self.t.live(m, video), preview=True)
             self.process_protocol(m, p, {"goals": [], "penalties": []})
-            self.send(self.t.result(m, p, video, self.safe(self.site.team_forwards_season)))
+            self.result_messages(m, p, video)
             self.send(self.digest("📋 Сводка после матча"))
         finally:
             self.tg.send = send
@@ -511,7 +580,7 @@ class Bot:
     # ------------------------------------------------------------ дополнения от Claude
 
     def publish_extras(self) -> None:
-        """Викторины и посты из content/queue.json (их готовит задача на Mac).
+        """Посты, опросы, картинки и ролики из content/queue.json (их готовят задачи на Mac).
         Публикуем в назначенное время; если опоздали больше чем на 12 часов — пропускаем."""
         now = self.now()
         sent = self.st.setdefault("extras_sent", [])
@@ -539,6 +608,13 @@ class Bot:
                         continue                  # попробуем в следующий раз
                     self.tg.send_photos([img], escape(it.get("caption", "")))
                     log("Отправлено: картинка " + it["image"])
+                elif it["type"] == "video":
+                    vid = extras.load_image(it["video"])
+                    if not vid:
+                        log(f"Дополнение {it['id']}: ролик {it['video']} не найден")
+                        continue                  # попробуем в следующий раз
+                    self.tg.send_video(vid, escape(it.get("caption", "")), silent=self.quiet())
+                    log("Отправлено: ролик " + it["video"])
                 else:
                     title = f"<b>{escape(it['title'])}</b>\n\n" if it.get("title") else ""
                     self.send(title + escape(it["text"]))

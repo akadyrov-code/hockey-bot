@@ -1,1 +1,5 @@
-matplotlib>=3.8,<4
+# Для задач на Mac (не для GitHub): графики и шортсы с голами
+matplotlib>=3.8
+pillow>=10
+yt-dlp
+imageio-ffmpeg>=0.5

@@ -112,6 +112,7 @@ class Protocol:
     penalties: list[Penalty] = field(default_factory=list)
     player_line: dict[str, str] | None = None
     forwards: dict[str, list] = field(default_factory=dict)   # side -> [(id, имя, {...})]
+    logos: list[str] = field(default_factory=list)            # эмблемы: хозяева, гости
 
 
 @dataclass
@@ -147,6 +148,14 @@ class RHL:
 
     def url(self, path: str) -> str:
         return self.base + path
+
+    def image(self, url: str) -> bytes | None:
+        """Эмблема команды (на сайте есть 100×100 и 200×200)."""
+        try:
+            r = self.s.get(url.replace("/100_100/", "/200_200/"), timeout=15)
+            return r.content if r.ok and r.headers.get("content-type", "").startswith("image/") else None
+        except requests.RequestException:
+            return None
 
     def get(self, path: str, attempts: int = 3) -> BeautifulSoup:
         last, not_found = None, False
@@ -233,6 +242,7 @@ class RHL:
                 p.home, p.away = _text(names[0]), _text(names[1])
             p.score = _text(hero.select_one(".matchcenter-hero__score-main"))
             p.status = _text(hero.select_one(".matchcenter-hero__status-name"))
+            p.logos = [i["src"] for i in hero.select("img[src]") if "/team/" in i["src"]][:2]
             # После сирены сайт то ставит «--winner-», то пишет «матч завершен» без него.
             p.finished = (any("--winner-" in c for c in hero.get("class", []))
                           or "заверш" in p.status.lower())

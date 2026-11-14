@@ -42,6 +42,14 @@ def day_str(d: datetime | date, weekday: bool = True) -> str:
     return f"{WEEKDAYS[d.weekday()]}, {s}" if weekday else s
 
 
+def short_team(name: str) -> str:
+    """«МХК Кристалл» -> «Кристалл»: на картинках и в роликах так читается лучше."""
+    for prefix in ("МХК ", "ХК "):
+        if name.startswith(prefix):
+            return name[len(prefix):]
+    return name
+
+
 def period_name(per: str) -> str:
     per = (per or "").strip()
     if per.isdigit():
@@ -289,7 +297,38 @@ class Texts:
             text += " среди нападающих\n"
         return text
 
-    def result(self, m: Match, p: Protocol, video: str | None, season_fw: list | None = None) -> str:
+    def won(self, home: str, score: str) -> bool | None:
+        try:
+            h, a = (int(x) for x in score.split(":"))
+        except ValueError:
+            return None
+        return (h > a) == self.ours(home)
+
+    def card_caption(self, m: Match, p: Protocol, marks: list[str]) -> str:
+        """Подпись к картинке-итогу: счёт и вехи, остальное — на самой картинке."""
+        extra = f" ({escape(p.score_type)})" if p.score_type else ""
+        text = f"🏁 {self.scoreline(p.home or m.home, p.away or m.away, p.score)}{extra}"
+        for mark in marks:
+            text += f"\n🎉 {escape(mark)}"
+        return text
+
+    def card_details(self, p: Protocol) -> list[str]:
+        """«Гол — 04:23, 1-й период», «Передача — 20:19 (забил Кашуров)»."""
+        out = []
+        for g in p.goals:
+            if g.scorer_id == self.pid:
+                out.append(f"Гол — {g.time}, {period_name(g.period)}")
+            elif any(pid == self.pid for pid, _ in g.assists):
+                out.append(f"Передача — {g.time} (забил {g.scorer.split()[-1] if g.scorer else '?'})")
+        return out
+
+    def season_short(self, st: dict) -> str:
+        n, g, a, pts = st["matches"], st["goals"], st["a"], st["points"]
+        return (f"Сезон: {n} {plural(n, 'игра', 'игры', 'игр')} · {g} {plural(g, 'гол', 'гола', 'голов')} · "
+                f"{a} {plural(a, 'передача', 'передачи', 'передач')} · {pts} {plural(pts, 'очко', 'очка', 'очков')}")
+
+    def result(self, m: Match, p: Protocol, video: str | None, season_fw: list | None = None,
+               marks: list[str] | None = None) -> str:
         home, away = p.home or m.home, p.away or m.away
         extra = f" ({escape(p.score_type)})" if p.score_type else ""
         text = f"🏁 <b>Матч завершён</b>\n{self.scoreline(home, away, p.score)}{extra}\n"
@@ -330,6 +369,8 @@ class Texts:
                              f"{escape(g.scorer.split()[-1] if g.scorer else '?')})\n")
         else:
             text += f"{escape(self.first)} в протоколе этого матча не значится.\n"
+        for mark in marks or []:
+            text += f"🎉 {escape(mark)}\n"
         text += self.forwards_block(f"Нападающие «{escape(self.team_gen)}» за матч",
                                     p.forwards.get(ours_side, []), season=False)
         if season_fw:

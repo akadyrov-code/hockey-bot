@@ -21,7 +21,8 @@
 
   "daily_hour": 12,
   "daily_weekdays": [0, 1, 2, 3, 4],
-  "leaders_weekdays": [0, 3],
+  "daily_only_near_match": true,
+  "leaders_weekdays": [3],
   "leaders_hour": 20,
   "weekly_weekday": 0,
   "weekly_hour": 10,

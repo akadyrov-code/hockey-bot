@@ -66,7 +66,27 @@ class Telegram:
         self._call("sendPoll", chat_id=self.chat_id, question=question, is_anonymous=True,
                    options=[{"text": o} for o in options])
 
-    def send_photos(self, photos: list[bytes], caption: str) -> None:
+    def send_video(self, video: bytes, caption: str, silent: bool = False) -> None:
+        """Вертикальный ролик (шортс) до 50 МБ."""
+        if self.dry_run:
+            print(f"\n----- [видео: {len(video) / 1e6:.1f} МБ] -----\n{caption}\n-----")
+            return
+        data = {"chat_id": self.chat_id, "caption": caption, "parse_mode": "HTML",
+                "supports_streaming": "true", "width": 1080, "height": 1920,
+                "disable_notification": "true" if silent else "false"}
+        for attempt in range(3):
+            r = requests.post(self.api + "sendVideo", timeout=300, data=data,
+                              files={"video": ("goal.mp4", video, "video/mp4")})
+            resp = r.json()
+            if resp.get("ok"):
+                return
+            retry = (resp.get("parameters") or {}).get("retry_after")
+            if not retry:
+                raise RuntimeError(f"Telegram sendVideo: {resp.get('description')}")
+            time.sleep(int(retry) + 1)
+        raise RuntimeError("Telegram sendVideo: нет ответа")
+
+    def send_photos(self, photos: list[bytes], caption: str, silent: bool = False) -> None:
         """Альбом до 10 фото, подпись — у первого."""
         for i in range(0, len(photos), 10):
             chunk = photos[i:i + 10]
@@ -74,15 +94,16 @@ class Telegram:
                 print(f"\n----- [альбом: {len(chunk)} фото] -----\n{caption}\n-----")
                 continue
             cap = {"caption": caption, "parse_mode": "HTML"} if i == 0 else {}
+            quiet = {"disable_notification": "true" if silent else "false"}
             if len(chunk) == 1:                 # альбом в Telegram — минимум 2 фото
                 method, files = "sendPhoto", {"photo": ("p.jpg", chunk[0], "image/jpeg")}
-                data = {"chat_id": self.chat_id, **cap}
+                data = {"chat_id": self.chat_id, **cap, **quiet}
             else:
                 media = [{"type": "photo", "media": f"attach://p{j}"} for j in range(len(chunk))]
                 media[0].update(cap)
                 method = "sendMediaGroup"
                 files = {f"p{j}": (f"p{j}.jpg", b, "image/jpeg") for j, b in enumerate(chunk)}
-                data = {"chat_id": self.chat_id, "media": json.dumps(media)}
+                data = {"chat_id": self.chat_id, "media": json.dumps(media), **quiet}
             for attempt in range(3):
                 r = requests.post(self.api + method, timeout=120, files=files, data=data)
                 data = r.json()

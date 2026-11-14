@@ -21,11 +21,12 @@ QUEUE = Path(__file__).resolve().parent.parent / "content" / "queue.json"
 
 
 def load_image(path: str) -> bytes | None:
-    """Картинка из репозитория (content/img/...): на GitHub — свежая версия, локально — с диска."""
+    """Картинка или ролик из репозитория (content/img/..., content/video/...):
+    на GitHub — свежая версия, локально — с диска."""
     repo = os.environ.get("GITHUB_REPOSITORY")
     if repo:
         try:
-            r = requests.get(f"https://raw.githubusercontent.com/{repo}/main/{path}", timeout=30)
+            r = requests.get(f"https://raw.githubusercontent.com/{repo}/main/{path}", timeout=120)
             if r.status_code == 200:
                 return r.content
         except requests.RequestException as e:
@@ -91,8 +92,20 @@ def validate(item: dict) -> str | None:
             return "caption длиннее 1000 символов"
         if not (QUEUE.parent.parent / img).exists() and not os.environ.get("GITHUB_REPOSITORY"):
             return f"нет файла {img}"
+    elif kind == "video":
+        vid = item.get("video", "")
+        if not vid.startswith("content/video/") or not vid.lower().endswith(".mp4"):
+            return "video — путь вида content/video/<имя>.mp4"
+        if len(item.get("caption", "")) > 1000:
+            return "caption длиннее 1000 символов"
+        local = QUEUE.parent.parent / vid
+        if not os.environ.get("GITHUB_REPOSITORY"):
+            if not local.exists():
+                return f"нет файла {vid}"
+            if local.stat().st_size > 45 * 1024 * 1024:
+                return f"{vid} больше 45 МБ — Telegram не примет"
     else:
-        return "type должен быть text, quiz, poll или photo"
+        return "type должен быть text, quiz, poll, photo или video"
     return None
 
 
