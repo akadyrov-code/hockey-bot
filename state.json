@@ -33,12 +33,14 @@
  "league_news_last": 51395,
  "matches": {
   "905298": {
+   "announced": 1,
    "assists": [],
    "goals": [],
    "live_sent": "",
    "penalties": [],
    "reminder_sent": true,
    "result_sent": false,
+   "score_seen": "1:0",
    "scored": [],
    "started_sent": true,
    "statuses": [
