@@ -64,11 +64,17 @@
    ]
   },
   "905302": {
+   "assists": [],
    "goals": [],
    "live_sent": "",
    "penalties": [],
    "reminder_sent": true,
-   "result_sent": false
+   "result_sent": false,
+   "scored": [],
+   "started_sent": true,
+   "statuses": [
+    "1-й период"
+   ]
   },
   "905333": {
    "goals": [],
