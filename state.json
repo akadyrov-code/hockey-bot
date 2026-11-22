@@ -64,21 +64,22 @@
    ]
   },
   "905302": {
-   "announced": 2,
+   "announced": 3,
    "assists": [],
    "goals": [],
    "live_sent": "https://vkvideo.ru/video-231699201_456239236",
    "penalties": [],
    "reminder_sent": true,
    "result_sent": false,
-   "score_seen": "1:1",
+   "score_seen": "2:1",
    "scored": [],
    "started_sent": true,
    "statuses": [
     "1-й период",
     "1-й перерыв",
     "2-й период",
-    "2-й перерыв"
+    "2-й перерыв",
+    "3-й период"
    ]
   },
   "905333": {
