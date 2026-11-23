@@ -29,7 +29,7 @@
  "initialized": true,
  "last_daily": "2026-11-20",
  "last_leaders": "2026-11-19",
- "last_weekly": "2026-W47",
+ "last_weekly": "2026-W48",
  "league_news_last": 51397,
  "matches": {
   "905298": {
@@ -591,8 +591,8 @@
   }
  },
  "standings_snap": {
-  "date": "2026-11-16",
-  "points": 17,
+  "date": "2026-11-23",
+  "points": 19,
   "pos": 6
  }
 }
