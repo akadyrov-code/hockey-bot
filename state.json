@@ -32,34 +32,6 @@
  "last_weekly": "2026-W48",
  "league_news_last": 51399,
  "matches": {
-  "905302": {
-   "announced": 5,
-   "assists": [],
-   "final_sent": "2026-11-22T14:24:38.747251+03:00",
-   "goals": [
-    "2|24:47",
-    "2|33:49",
-    "3|53:27",
-    "3|53:47",
-    "3|56:04"
-   ],
-   "live_sent": "https://vkvideo.ru/video-231699201_456239236",
-   "penalties": [],
-   "postgame_after": "2026-11-22T20:59:32.272244+03:00",
-   "postgame_sent": true,
-   "reminder_sent": true,
-   "result_sent": true,
-   "score_seen": "3:2",
-   "scored": [],
-   "started_sent": true,
-   "statuses": [
-    "1-й период",
-    "1-й перерыв",
-    "2-й период",
-    "2-й перерыв",
-    "3-й период"
-   ]
-  },
   "905333": {
    "goals": [],
    "live_sent": "",
@@ -286,14 +258,6 @@
   }
  },
  "schedule": {
-  "905302": {
-   "away": "МХК Кристалл",
-   "home": "ХК Самара",
-   "id": 905302,
-   "kickoff": "2026-11-22T12:00:00+03:00",
-   "place": "№ 192 Самара",
-   "tournament": 1432
-  },
   "905333": {
    "away": "Прогресс",
    "home": "МХК Кристалл",
